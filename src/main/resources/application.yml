@@ -1,0 +1,32 @@
+spring:
+  application:
+    name: cryptoalarm
+  datasource:
+    url: jdbc:postgresql://localhost:5432/cryptoalarm
+    username: cryptoalarm
+    password: cryptoalarm
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+
+# JWT ayarlari. secret HS256 icin >= 256 bit (>= 32 karakter) olmali.
+# Uretimde ENV degiskeninden gelmeli; burada dev varsayilani.
+security:
+  jwt:
+    secret: ${JWT_SECRET:cryptoalarm-dev-secret-key-change-me-please-32+chars}
+    # 7 gun: uzun oturumda token suresinin dolup SSE'lerin 401 vermesini onler
+    expiry-minutes: 10080
+
+# Dis borsa baglanti ayarlari
+exchange:
+  ws-url: wss://stream.binance.com:9443/ws
+  symbols:
+    - BTCUSDT
+    - ETHUSDT
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, metrics
