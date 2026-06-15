@@ -5,8 +5,9 @@ import { useFavorites } from '@/hooks/useFavorites'
 import { useActiveSymbol } from '@/hooks/useActiveSymbol'
 import { fmtPrice } from '@/lib/symbolFormat'
 import { CoinIcon } from '@/components/trade/CoinIcon'
+import { Sparkline } from '@/components/trade/Sparkline'
 
-type Tab = 'fav' | 'usdt'
+type Tab = 'fav' | 'usdt' | 'gainers' | 'losers'
 
 export function MarketsSidebar() {
   const { data: tickers } = useMarketTickers()
@@ -16,15 +17,17 @@ export function MarketsSidebar() {
   const [query, setQuery] = useState('')
 
   const rows = useMemo(() => {
-    let list = tickers ?? []
-    if (tab === 'fav') list = list.filter((t) => isFavorite(t.symbol))
+    const list = tickers ?? []
     if (query) {
       const q = query.toUpperCase()
-      list = list.filter((t) => t.symbol.includes(q))
-    } else if (tab === 'usdt') {
-      list = list.slice(0, 150) // arama yokken en yuksek hacimli 150
+      return list.filter((t) => t.symbol.includes(q)).slice(0, 60)
     }
-    return list
+    if (tab === 'fav') return list.filter((t) => isFavorite(t.symbol))
+    if (tab === 'gainers')
+      return [...list].sort((a, b) => b.priceChangePercent - a.priceChangePercent).slice(0, 40)
+    if (tab === 'losers')
+      return [...list].sort((a, b) => a.priceChangePercent - b.priceChangePercent).slice(0, 40)
+    return list.slice(0, 50) // USDT: hacme gore
   }, [tickers, tab, query, isFavorite])
 
   return (
@@ -41,19 +44,25 @@ export function MarketsSidebar() {
         </div>
       </div>
 
-      <div className="flex gap-3 border-b border-bn-line px-3 text-xs">
+      <div className="flex gap-2 overflow-x-auto border-b border-bn-line px-2 text-[11px]">
         <TabBtn active={tab === 'fav'} onClick={() => setTab('fav')}>
-          ★ Favoriler
+          ★
         </TabBtn>
         <TabBtn active={tab === 'usdt'} onClick={() => setTab('usdt')}>
           USDT
         </TabBtn>
+        <TabBtn active={tab === 'gainers'} onClick={() => setTab('gainers')}>
+          Yükselen
+        </TabBtn>
+        <TabBtn active={tab === 'losers'} onClick={() => setTab('losers')}>
+          Düşen
+        </TabBtn>
       </div>
 
-      <div className="grid grid-cols-[1.4fr_1fr_0.9fr] px-3 py-1.5 text-[10px] uppercase tracking-wide text-bn-sub">
+      <div className="grid grid-cols-[minmax(0,1fr)_auto_44px] gap-2 px-3 py-1.5 text-[10px] uppercase tracking-wide text-bn-sub">
         <span>Çift</span>
-        <span className="text-right">Fiyat</span>
-        <span className="text-right">24s%</span>
+        <span className="text-right">Fiyat / 24s%</span>
+        <span className="text-right">6s</span>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
@@ -70,11 +79,11 @@ export function MarketsSidebar() {
               <button
                 key={t.symbol}
                 onClick={() => setSymbol(t.symbol)}
-                className={`grid w-full grid-cols-[1.4fr_1fr_0.9fr] items-center px-3 py-1.5 text-xs transition hover:bg-bn-line/50 ${
+                className={`grid w-full grid-cols-[minmax(0,1fr)_auto_44px] items-center gap-2 px-3 py-1.5 text-xs transition hover:bg-bn-line/50 ${
                   active ? 'bg-bn-line/60' : ''
                 }`}
               >
-                <span className="flex items-center gap-1.5">
+                <span className="flex min-w-0 items-center gap-1.5">
                   <Star
                     onClick={(e) => {
                       e.stopPropagation()
@@ -87,17 +96,23 @@ export function MarketsSidebar() {
                     }`}
                   />
                   <CoinIcon asset={base} size={16} />
-                  <span className="font-medium text-bn-txt">{base}</span>
-                  <span className="text-bn-sub">/USDT</span>
+                  <span className="truncate font-medium text-bn-txt">{base}</span>
                 </span>
-                <span className="text-right font-mono tabular-nums text-bn-txt">
-                  {fmtPrice(t.symbol, t.lastPrice)}
+
+                <span className="text-right">
+                  <span className="block font-mono tabular-nums text-bn-txt">
+                    {fmtPrice(t.symbol, t.lastPrice)}
+                  </span>
+                  <span
+                    className={`block font-mono text-[10px] tabular-nums ${up ? 'text-bn-up' : 'text-bn-down'}`}
+                  >
+                    {up ? '+' : ''}
+                    {t.priceChangePercent.toFixed(2)}%
+                  </span>
                 </span>
-                <span
-                  className={`text-right font-mono tabular-nums ${up ? 'text-bn-up' : 'text-bn-down'}`}
-                >
-                  {up ? '+' : ''}
-                  {t.priceChangePercent.toFixed(2)}%
+
+                <span className="flex justify-end">
+                  <Sparkline symbol={t.symbol} up={up} />
                 </span>
               </button>
             )
@@ -120,7 +135,7 @@ function TabBtn({
   return (
     <button
       onClick={onClick}
-      className={`-mb-px border-b-2 py-2 transition ${
+      className={`-mb-px shrink-0 border-b-2 py-2 transition ${
         active ? 'border-bn-gold text-bn-txt' : 'border-transparent text-bn-sub hover:text-bn-txt'
       }`}
     >

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { closeWs, openDepthStream, type DepthLevel, type DepthSnapshot } from '@/lib/binance'
 import { useActiveSymbol } from '@/hooks/useActiveSymbol'
 import { fmtPrice, fmtQty, priceDecimals } from '@/lib/symbolFormat'
+import { DepthChart } from '@/components/trade/DepthChart'
 
 const ROWS = 12
 
@@ -36,6 +37,7 @@ export function OrderBook() {
   )
   const [group, setGroup] = useState<number | null>(null)
   const groupSize = group ?? baseTick
+  const [view, setView] = useState<'book' | 'depth'>('book')
 
   const asks = useMemo(
     () => withCumulative(groupLevels(depth.asks, groupSize, true).slice(0, ROWS)),
@@ -56,26 +58,46 @@ export function OrderBook() {
   return (
     <div className="flex h-full flex-col bg-bn-panel">
       <div className="flex items-center justify-between border-b border-bn-line px-3 py-1.5">
-        <span className="text-xs font-medium text-bn-txt">Emir Defteri</span>
-        <select
-          value={groupSize}
-          onChange={(e) => setGroup(Number(e.target.value))}
-          className="rounded border border-bn-line bg-bn-panel2 px-1 py-0.5 text-[10px] text-bn-sub outline-none"
-        >
-          {groupOptions.map((g) => (
-            <option key={g} value={g} className="bg-bn-panel">
-              {g >= 1 ? g : g.toFixed(priceDecimals(symbol, depth.asks[0]?.price))}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="grid grid-cols-3 px-3 py-1 text-[10px] uppercase tracking-wide text-bn-sub">
-        <span>Fiyat</span>
-        <span className="text-right">Miktar</span>
-        <span className="text-right">Toplam</span>
+        <div className="flex gap-2 text-xs">
+          <button
+            onClick={() => setView('book')}
+            className={`transition ${view === 'book' ? 'font-medium text-bn-txt' : 'text-bn-sub hover:text-bn-txt'}`}
+          >
+            Defter
+          </button>
+          <button
+            onClick={() => setView('depth')}
+            className={`transition ${view === 'depth' ? 'font-medium text-bn-txt' : 'text-bn-sub hover:text-bn-txt'}`}
+          >
+            Derinlik
+          </button>
+        </div>
+        {view === 'book' && (
+          <select
+            value={groupSize}
+            onChange={(e) => setGroup(Number(e.target.value))}
+            className="rounded border border-bn-line bg-bn-panel2 px-1 py-0.5 text-[10px] text-bn-sub outline-none"
+          >
+            {groupOptions.map((g) => (
+              <option key={g} value={g} className="bg-bn-panel">
+                {g >= 1 ? g : g.toFixed(priceDecimals(symbol, depth.asks[0]?.price))}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-hidden">
+      {view === 'depth' ? (
+        <DepthChart depth={depth} symbol={symbol} />
+      ) : (
+        <>
+          <div className="grid grid-cols-3 px-3 py-1 text-[10px] uppercase tracking-wide text-bn-sub">
+            <span>Fiyat</span>
+            <span className="text-right">Miktar</span>
+            <span className="text-right">Toplam</span>
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-hidden">
         <div className="flex flex-col-reverse">
           {asks.map((lvl) => (
             <Row key={`a-${lvl.price}`} lvl={lvl} maxTotal={maxTotal} side="ask" symbol={symbol} />
@@ -98,7 +120,9 @@ export function OrderBook() {
             <Row key={`b-${lvl.price}`} lvl={lvl} maxTotal={maxTotal} side="bid" symbol={symbol} />
           ))}
         </div>
-      </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }

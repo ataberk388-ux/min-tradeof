@@ -1,3 +1,4 @@
+import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels'
 import { BalancePanel } from '@/components/trade/BalancePanel'
 import { BottomTabs } from '@/components/trade/BottomTabs'
 import { ChartPanel } from '@/components/trade/ChartPanel'
@@ -11,11 +12,23 @@ import { ActiveSymbolProvider } from '@/hooks/useActiveSymbol'
 import { useAlarmStream } from '@/hooks/useAlarmStream'
 import { useExchangeInfo } from '@/hooks/useExchangeInfo'
 
-/** Binance spot tarzi trading terminali (tam boy order book + trades). */
+/** Dikey panel kenari (yatay PanelGroup icinde) — surukle ile genislik ayari. */
+function VHandle() {
+  return (
+    <PanelResizeHandle className="w-1 bg-bn-line transition-colors hover:bg-bn-gold data-[resize-handle-state=drag]:bg-bn-gold" />
+  )
+}
+
+/** Yatay panel kenari (dikey PanelGroup icinde) — surukle ile yukseklik ayari. */
+function HHandle() {
+  return (
+    <PanelResizeHandle className="h-1 bg-bn-line transition-colors hover:bg-bn-gold data-[resize-handle-state=drag]:bg-bn-gold" />
+  )
+}
+
+/** Binance spot tarzi trading terminali — surukle ile boyutlandirilabilir paneller. */
 export function TradingTerminal() {
-  // Tetiklenen alarm toast'lari terminalde de aktif kalsin
   useAlarmStream()
-  // Sembol ondalik hassasiyetlerini (tickSize/stepSize) bir kez yukle
   useExchangeInfo()
 
   return (
@@ -24,39 +37,51 @@ export function TradingTerminal() {
         <TerminalTopbar />
         <SymbolHeader />
 
-        <div className="flex min-h-0 flex-1">
-          {/* Markets */}
-          <div className="w-60 shrink-0 border-r border-bn-line">
-            <MarketsSidebar />
-          </div>
+        <div className="min-h-0 flex-1">
+          <PanelGroup autoSaveId="terminal-h" direction="horizontal">
+            {/* Markets */}
+            <Panel defaultSize={15} minSize={10}>
+              <MarketsSidebar />
+            </Panel>
+            <VHandle />
 
-          {/* Order book (tam boy) */}
-          <div className="w-64 shrink-0 border-r border-bn-line">
-            <OrderBook />
-          </div>
+            {/* Order book */}
+            <Panel defaultSize={17} minSize={12}>
+              <OrderBook />
+            </Panel>
+            <VHandle />
 
-          {/* Orta: grafik + alt sekmeler */}
-          <div className="flex min-w-0 flex-1 flex-col border-r border-bn-line">
-            <div className="min-h-0 flex-1">
-              <ChartPanel />
-            </div>
-            <div className="h-48 shrink-0 border-t border-bn-line">
-              <BottomTabs />
-            </div>
-          </div>
+            {/* Orta: grafik + alt sekmeler (dikey boyutlandirilabilir) */}
+            <Panel defaultSize={46} minSize={25}>
+              <PanelGroup autoSaveId="terminal-center" direction="vertical">
+                <Panel defaultSize={68} minSize={25}>
+                  <ChartPanel />
+                </Panel>
+                <HHandle />
+                <Panel defaultSize={32} minSize={15}>
+                  <BottomTabs />
+                </Panel>
+              </PanelGroup>
+            </Panel>
+            <VHandle />
 
-          {/* Sag: emir formu + son islemler + bakiye */}
-          <div className="flex w-80 shrink-0 flex-col">
-            <div className="min-h-0 flex-1 border-b border-bn-line">
-              <OrderForm />
-            </div>
-            <div className="h-64 shrink-0 border-b border-bn-line">
-              <RecentTrades />
-            </div>
-            <div className="h-40 shrink-0">
-              <BalancePanel />
-            </div>
-          </div>
+            {/* Sag: emir formu + son islemler + bakiye (dikey boyutlandirilabilir) */}
+            <Panel defaultSize={22} minSize={15}>
+              <PanelGroup autoSaveId="terminal-right" direction="vertical">
+                <Panel defaultSize={46} minSize={20}>
+                  <OrderForm />
+                </Panel>
+                <HHandle />
+                <Panel defaultSize={34} minSize={15}>
+                  <RecentTrades />
+                </Panel>
+                <HHandle />
+                <Panel defaultSize={20} minSize={12}>
+                  <BalancePanel />
+                </Panel>
+              </PanelGroup>
+            </Panel>
+          </PanelGroup>
         </div>
       </div>
     </ActiveSymbolProvider>
