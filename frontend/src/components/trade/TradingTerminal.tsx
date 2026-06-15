@@ -9,6 +9,7 @@ import { RecentTrades } from '@/components/trade/RecentTrades'
 import { SymbolHeader } from '@/components/trade/SymbolHeader'
 import { TerminalTopbar } from '@/components/trade/TerminalTopbar'
 import { ActiveSymbolProvider } from '@/hooks/useActiveSymbol'
+import { OrderTicketProvider } from '@/hooks/useOrderTicket'
 import { useAlarmStream } from '@/hooks/useAlarmStream'
 import { useExchangeInfo } from '@/hooks/useExchangeInfo'
 
@@ -33,6 +34,7 @@ export function TradingTerminal() {
 
   return (
     <ActiveSymbolProvider>
+      <OrderTicketProvider>
       <div className="flex h-screen flex-col overflow-hidden bg-bn-bg text-bn-txt">
         <TerminalTopbar />
         <SymbolHeader />
@@ -84,6 +86,7 @@ export function TradingTerminal() {
           </PanelGroup>
         </div>
       </div>
+      </OrderTicketProvider>
     </ActiveSymbolProvider>
   )
 }

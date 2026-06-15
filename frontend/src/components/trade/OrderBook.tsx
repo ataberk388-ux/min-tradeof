@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { closeWs, openDepthStream, type DepthLevel, type DepthSnapshot } from '@/lib/binance'
 import { useActiveSymbol } from '@/hooks/useActiveSymbol'
+import { useOrderTicket } from '@/hooks/useOrderTicket'
 import { fmtPrice, fmtQty, priceDecimals } from '@/lib/symbolFormat'
 import { DepthChart } from '@/components/trade/DepthChart'
 
@@ -8,6 +9,7 @@ const ROWS = 12
 
 export function OrderBook() {
   const { debouncedSymbol: symbol } = useActiveSymbol()
+  const { fillPrice } = useOrderTicket()
   const [depth, setDepth] = useState<DepthSnapshot>({ bids: [], asks: [] })
 
   useEffect(() => {
@@ -100,7 +102,7 @@ export function OrderBook() {
           <div className="min-h-0 flex-1 overflow-hidden">
         <div className="flex flex-col-reverse">
           {asks.map((lvl) => (
-            <Row key={`a-${lvl.price}`} lvl={lvl} maxTotal={maxTotal} side="ask" symbol={symbol} />
+            <Row key={`a-${lvl.price}`} lvl={lvl} maxTotal={maxTotal} side="ask" symbol={symbol} onClick={() => fillPrice(lvl.price)} />
           ))}
         </div>
 
@@ -117,7 +119,7 @@ export function OrderBook() {
 
         <div>
           {bids.map((lvl) => (
-            <Row key={`b-${lvl.price}`} lvl={lvl} maxTotal={maxTotal} side="bid" symbol={symbol} />
+            <Row key={`b-${lvl.price}`} lvl={lvl} maxTotal={maxTotal} side="bid" symbol={symbol} onClick={() => fillPrice(lvl.price)} />
           ))}
         </div>
           </div>
@@ -159,15 +161,20 @@ function Row({
   maxTotal,
   side,
   symbol,
+  onClick,
 }: {
   lvl: CumLevel
   maxTotal: number
   side: 'ask' | 'bid'
   symbol: string
+  onClick: () => void
 }) {
   const pct = (lvl.total / maxTotal) * 100
   return (
-    <div className="relative grid grid-cols-3 px-3 py-[3px] font-mono text-[11px] tabular-nums">
+    <div
+      onClick={onClick}
+      className="relative grid cursor-pointer grid-cols-3 px-3 py-[3px] font-mono text-[11px] tabular-nums hover:bg-bn-line/40"
+    >
       <div
         className={`absolute inset-y-0 right-0 ${side === 'ask' ? 'bg-bn-down/10' : 'bg-bn-up/10'}`}
         style={{ width: `${pct}%` }}

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   CrosshairMode,
+  LineStyle,
   createChart,
   type CandlestickData,
   type IChartApi,
@@ -17,12 +18,13 @@ import {
   type Interval,
 } from '@/lib/binance'
 import { useActiveSymbol } from '@/hooks/useActiveSymbol'
-import { bollinger, ema, sma } from '@/lib/indicators'
+import { bollinger, ema, rsi, sma } from '@/lib/indicators'
 
 interface Indicators {
   ma: boolean
   ema: boolean
   boll: boolean
+  rsi: boolean
 }
 
 /** TradingView Lightweight Charts ile gercek mum grafigi + indikatorler (Binance verisi). */
@@ -31,8 +33,11 @@ export function ChartPanel() {
   const [interval, setInterval] = useState<Interval>('1m')
   const [debInterval, setDebInterval] = useState<Interval>('1m')
   const [status, setStatus] = useState('Yükleniyor…')
-  const [ind, setInd] = useState<Indicators>({ ma: false, ema: false, boll: false })
+  const [ind, setInd] = useState<Indicators>({ ma: false, ema: false, boll: false, rsi: false })
   const containerRef = useRef<HTMLDivElement>(null)
+  const rsiContainerRef = useRef<HTMLDivElement>(null)
+  const rsiChartRef = useRef<IChartApi | null>(null)
+  const rsiSeriesRef = useRef<ISeriesApi<'Line'> | null>(null)
 
   useEffect(() => {
     const t = setTimeout(() => setDebInterval(interval), 250)
@@ -113,7 +118,53 @@ export function ChartPanel() {
     bollURef.current?.setData(toLine(b.upper))
     bollMRef.current?.setData(toLine(b.middle))
     bollLRef.current?.setData(toLine(b.lower))
+    if (rsiSeriesRef.current) rsiSeriesRef.current.setData(toLine(rsi(closes, 14)))
   }
+
+  // RSI alt-pane: acikken ayri kucuk grafik olusturulur, kapaninca yok edilir
+  useEffect(() => {
+    if (!ind.rsi || !rsiContainerRef.current) return
+    const chart = createChart(rsiContainerRef.current, {
+      layout: { background: { color: '#181A20' }, textColor: '#848E9C' },
+      grid: { vertLines: { visible: false }, horzLines: { color: '#2B3139' } },
+      timeScale: { borderColor: '#2B3139', visible: false },
+      rightPriceScale: { borderColor: '#2B3139' },
+      crosshair: { mode: CrosshairMode.Normal },
+      autoSize: true,
+    })
+    const series = chart.addLineSeries({
+      color: '#9b87f5',
+      lineWidth: 1,
+      priceLineVisible: false,
+    })
+    series.createPriceLine({ price: 70, color: 'rgba(246,70,93,0.4)', lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: false, title: '' })
+    series.createPriceLine({ price: 30, color: 'rgba(14,203,129,0.4)', lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: false, title: '' })
+    rsiChartRef.current = chart
+    rsiSeriesRef.current = series
+    applyIndicators()
+
+    const main = chartRef.current
+    const sync = (range: unknown) => {
+      if (range) {
+        try {
+          chart.timeScale().setVisibleLogicalRange(range as never)
+        } catch {
+          /* yok say */
+        }
+      }
+    }
+    const r = main?.timeScale().getVisibleLogicalRange()
+    if (r) sync(r)
+    main?.timeScale().subscribeVisibleLogicalRangeChange(sync)
+
+    return () => {
+      main?.timeScale().unsubscribeVisibleLogicalRangeChange(sync)
+      chart.remove()
+      rsiChartRef.current = null
+      rsiSeriesRef.current = null
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ind.rsi])
 
   // Toggle -> seri gorunurlugu
   useEffect(() => {
@@ -177,7 +228,8 @@ export function ChartPanel() {
             if (last && last.time === candle.time) arr[arr.length - 1] = candle
             else arr.push(candle)
             // Indikatorleri (acikken) kapanista veya en fazla ~2/sn hesapla
-            const anyOn = indRef.current.ma || indRef.current.ema || indRef.current.boll
+            const anyOn =
+              indRef.current.ma || indRef.current.ema || indRef.current.boll || indRef.current.rsi
             if (anyOn && (closed || Date.now() - lastInd > 500)) {
               lastInd = Date.now()
               applyIndicators()
@@ -220,6 +272,7 @@ export function ChartPanel() {
           <Chip on={ind.ma} onClick={() => toggle('ma')} color="#f6c343">MA</Chip>
           <Chip on={ind.ema} onClick={() => toggle('ema')} color="#4aa9ff">EMA</Chip>
           <Chip on={ind.boll} onClick={() => toggle('boll')} color="#848e9c">BOLL</Chip>
+          <Chip on={ind.rsi} onClick={() => toggle('rsi')} color="#9b87f5">RSI</Chip>
         </div>
       </div>
       <div className="relative min-h-0 flex-1">
@@ -228,6 +281,14 @@ export function ChartPanel() {
           {symbol} · {status}
         </span>
       </div>
+      {ind.rsi && (
+        <div className="relative h-20 shrink-0 border-t border-bn-line">
+          <div ref={rsiContainerRef} className="absolute inset-0" />
+          <span className="pointer-events-none absolute left-2 top-1 z-10 text-[10px] text-bn-sub">
+            RSI 14
+          </span>
+        </div>
+      )}
     </div>
   )
 }

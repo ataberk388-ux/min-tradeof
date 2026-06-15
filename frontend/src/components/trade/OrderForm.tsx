@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'rea
 import { toast } from 'sonner'
 import { closeWs, openTickerStream } from '@/lib/binance'
 import { useActiveSymbol } from '@/hooks/useActiveSymbol'
+import { useOrderTicket } from '@/hooks/useOrderTicket'
 import { useFillOrder, usePaperOrders, usePlaceOrder, usePortfolio } from '@/hooks/usePaper'
 import { formatNum } from '@/lib/format'
 import { fmtPrice, fmtQty } from '@/lib/symbolFormat'
@@ -18,10 +19,19 @@ export function OrderForm() {
   const [qty, setQty] = useState('')
   const [livePrice, setLivePrice] = useState<number | null>(null)
 
+  const { ticket } = useOrderTicket()
   const { data: portfolio } = usePortfolio()
   const { data: orders } = usePaperOrders()
   const place = usePlaceOrder()
   const fill = useFillOrder()
+
+  // Order book'tan fiyata tiklayinca: limit moduna gec + fiyati doldur
+  useEffect(() => {
+    if (ticket) {
+      setType('LIMIT')
+      setPrice(String(ticket.price))
+    }
+  }, [ticket])
 
   // Aktif sembolun canli fiyati
   useEffect(() => {

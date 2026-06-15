@@ -2,11 +2,13 @@ import { toast } from 'sonner'
 import { RotateCcw } from 'lucide-react'
 import { useResetPaper } from '@/hooks/usePaper'
 import { usePortfolioValue } from '@/hooks/usePortfolioValue'
+import { useEquityHistory } from '@/hooks/useEquityHistory'
 import { formatNum } from '@/lib/format'
 import { fmtPrice, fmtQty } from '@/lib/symbolFormat'
 
 export function BalancePanel() {
   const { usdt, enriched, equity, totalPnl } = usePortfolioValue()
+  const equityHistory = useEquityHistory(equity)
   const reset = useResetPaper()
 
   const onReset = () => {
@@ -44,9 +46,12 @@ export function BalancePanel() {
             </p>
           </div>
         </div>
-        <p className="mb-3 text-[11px] text-bn-sub">
+        <p className="mb-2 text-[11px] text-bn-sub">
           Kullanılabilir: <span className="font-mono text-bn-txt">{formatNum(usdt, 2)} USDT</span>
         </p>
+
+        <EquityChart points={equityHistory} up={pnlUp} />
+
 
         {enriched.length > 0 ? (
           <div>
@@ -82,6 +87,37 @@ export function BalancePanel() {
           <p className="text-xs text-bn-sub">Açık pozisyon yok</p>
         )}
       </div>
+    </div>
+  )
+}
+
+/** Toplam portfoy degerinin zaman icindeki mini alan grafigi. */
+function EquityChart({ points, up }: { points: { t: number; v: number }[]; up: boolean }) {
+  const W = 240
+  const H = 40
+  if (points.length < 2) {
+    return (
+      <div className="mb-3 flex h-10 items-center justify-center rounded border border-bn-line bg-bn-panel2 text-[10px] text-bn-sub">
+        Equity grafiği için veri birikiyor…
+      </div>
+    )
+  }
+  const vals = points.map((p) => p.v)
+  const min = Math.min(...vals)
+  const max = Math.max(...vals)
+  const range = max - min || 1
+  const X = (i: number) => (i / (points.length - 1)) * W
+  const Y = (v: number) => H - ((v - min) / range) * H
+  const line = points.map((p, i) => `${X(i)},${Y(p.v)}`).join(' ')
+  const area = `${X(0)},${H} ${line} ${X(points.length - 1)},${H}`
+  const color = up ? '#0ECB81' : '#F6465D'
+
+  return (
+    <div className="mb-3">
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="h-10 w-full">
+        <polygon points={area} fill={up ? 'rgba(14,203,129,0.12)' : 'rgba(246,70,93,0.12)'} />
+        <polyline points={line} fill="none" stroke={color} strokeWidth={1} />
+      </svg>
     </div>
   )
 }
