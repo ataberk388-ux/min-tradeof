@@ -1,319 +1,413 @@
-# 📊 Crypto Spot Terminal — Veri Akışı (Data Flow) Rehberi
+# 📊 Crypto Spot Terminal — Detaylı Veri Akışı (Data Flow)
 
-Bu doküman, projedeki **her verinin nereden çıkıp nereye gittiğini** gerçek sınıf/dosya
-adlarıyla anlatır. Mülakatta "bana mimarini anlat" denince bu sıralamayı takip edebilirsin.
+Her akış **adım-adım çağrı zinciri** olarak yazıldı: hangi fonksiyon → hangi metodu (hangi
+argümanla) çağırıyor → ne dönüyor → neyi tetikliyor. JSON gövdeleri, veri yapıları ve
+**hangi thread'de** çalıştığı dahil. Mülakatta "kod seviyesinde anlat" için bire bir kaynak.
 
----
-
-## 0) Kuşbakışı mimari
-
-```
-┌─────────────────────────────┐         ┌──────────────────────────────────────┐
-│   TARAYICI (React + TS)      │         │   BACKEND (Spring Boot, :8080)        │
-│                             │         │                                      │
-│  • Terminal UI              │  REST   │  AuthController / AccountController   │
-│  • TanStack Query (cache)   │ ──────► │  AlarmController / PaperController    │
-│  • EventSource (SSE)        │ ◄────── │  SSE: AlarmEventPublisher/PricePub.   │
-└──────┬───────────────┬──────┘  (JWT)  │  RuleEngine ◄ AlarmStore (RAM)       │
-       │               │                │  PaperTradeService + PaperOrderMatcher│
-       │ (doğrudan)    │                │  BinanceWebSocketClient (ingestion)  │
-       ▼               │                └───────┬──────────────────┬───────────┘
-┌──────────────┐       │                        │                  │
-│ Binance      │◄──────┘ (grafik/orderbook/     │ (canlı tick)     │ (JPA)
-│ public REST  │         trades/markets         ▼                  ▼
-│ + WebSocket  │         DOĞRUDAN tarayıcıdan)  Binance WS    ┌──────────────┐
-└──────────────┘                                              │ PostgreSQL   │
-                                                              │ (Flyway şema)│
-┌──────────────┐  (coin bilgi paneli)                         └──────────────┘
-│ CoinGecko    │◄───── doğrudan tarayıcıdan
-└──────────────┘
-```
-
-**Altın kural:** Ağır/anonim **piyasa verisi** (grafik, order book, trades, markets, coin bilgi)
-tarayıcıdan **doğrudan** Binance/CoinGecko'ya gider — backend'i meşgul etmez. Backend yalnız
-**bize ait** olanı yönetir: kimlik, alarmlar, paper-portföy.
+> Gösterim: `Sınıf.metot(arg)` · `[Thread: ...]` · `►` = çağırır/akar · `⇒` = döner
 
 ---
 
-## 1) Kimlik Doğrulama (Auth)
-
-**Amaç:** Stateless JWT ile çok kullanıcılı, izole oturum.
+## 0) Katmanlar ve sorumluluk
 
 ```
-[Kayıt/Giriş formu]  POST /api/auth/register | /login   (AuthForm.tsx → lib/api.ts)
-        │
-        ▼
-AuthController ──► AuthService
-        │            • register: BCrypt ile şifre hash'le, User'ı DB'ye yaz
-        │            • login: BCrypt.matches ile doğrula
-        │            • JwtService.issue(user) → imzalı JWT (userId claim'i içinde)
-        ▼
-AuthResponse { token, username }
-        │
-        ▼
-Tarayıcı token'ı saklar (localStorage, lib/auth.ts)
-        │
-        ▼
-Sonraki her istek: axios interceptor "Authorization: Bearer <token>" ekler (lib/api.ts)
-        │
-        ▼
-SecurityConfig: /api/auth/** + /actuator/health,prometheus = açık; gerisi JWT ister.
-Controller'lar @AuthenticationPrincipal Jwt'den userId claim'ini okur → veri izolasyonu.
+Frontend (React/TS)         Backend (Spring Boot)            Dış
+─────────────────           ─────────────────────            ───
+components/  (UI)            api/        (Controller)         Binance REST/WS
+hooks/       (durum)         service/    (iş mantığı)         CoinGecko REST
+lib/         (IO: axios/WS)  engine/     (sıcak yol)          PostgreSQL
+                            ingestion/  (WS client, cache)
+                            notification/ (SSE, async)
+                            cache/      (RAM alarm store)
+                            domain/     (JPA entity)
+                            repository/ (Spring Data JPA)
 ```
 
-- **Şifre değiştir:** `POST /api/account/password` → `AccountController` → `AuthService.changePassword`
-  (mevcut şifre BCrypt ile doğrulanır, yeni hash yazılır). `/api/account/**` kimlik ister.
+**Bağımlılık yönü:** Controller ► Service ► (Repository | Store | Client). Engine ► Store +
+TriggerHandler. WS Client ► tüm `PriceTickHandler`'lar. Hiçbir alt katman üste bağlı değil.
 
 ---
 
-## 2) Piyasa Verisi — İki Ayrı Kanal
+## 🧵 Thread modeli — kabaca ayrım (önce bunu oku)
 
-### 2a) Tarayıcı → Binance (doğrudan, backend yok)
-`frontend/src/lib/binance.ts` tüm bunları **doğrudan** Binance'ten çeker:
+Sistemde **5 ayrı thread bölgesi** var. Her akışta hangi bölgede olduğunu `[Thread: X]` ile işaretledim.
 
-| Veri | Kaynak | Kullanan |
-|------|--------|----------|
-| Mum grafiği | `@kline` WS + `/klines` REST | `ChartPanel` |
-| Order book | `@depth20@100ms` WS | `OrderBook` |
-| Son işlemler | `@trade` WS + `/trades` REST | `RecentTrades`, `OrderBook` (son fiyat) |
-| 24s ticker (markets) | `/ticker/24hr` REST (4 sn) | `useMarketTickers` → Markets, Watchlist, arama |
-| Sembol başlığı | `@ticker` WS | `SymbolHeader` |
-| Coin bilgi | CoinGecko `/coins/{id}` | `useCoinInfo` → `CoinInfoPanel` |
-
-> Port notu: WS `:9443` bazı ağlarda kapalı → `:443` kullanılır (REST gibi her yerde açık).
-
-### 2b) Backend → Binance (alarm motoru için ingestion)
-`BinanceWebSocketClient` kalıcı bir WS bağlantısı tutar:
 ```
-ApplicationReadyEvent → connect() → onOpen → subscribe(tüm semboller @trade + @ticker)
-        │
-        ▼ (her mesaj)
-BinancePriceParser.parse() → PriceTick { symbol, price, changePercent? }
-        │
-        ▼ (her tick TÜM handler'lara dağıtılır)
-   ┌────────────────┬──────────────────┬────────────────┐
-   ▼                ▼                  ▼
-RuleEngine     PriceCache         MetricsTracker
-(alarm eşleştir) (son fiyat snapshot) (tick sayacı)
+① Tomcat işçi thread'leri  (nio-exec-*)
+     → Gelen HTTP isteklerini işler: tüm Controller'lar, Service çağrıları, JPA.
+     → Her istek bir thread; istek bitince thread havuza döner. SSE açık kalır (async).
+
+② WebSocket IO thread  (jakarta.websocket istemcisi)
+     → Binance'ten gelen her tick'i okur: onMessage → parser → RuleEngine/PriceCache/MetricsTracker.
+     → SICAK YOL burada. Bloklamak yasak → ağır iş @Async havuzuna atılır.
+
+③ @Async havuzu  (notificationExecutor)
+     → Alarm tetiklenince bildirim + DB pasifleştirme + SSE push burada.
+     → Motoru (②) yavaşlatmamak için ayrıldı.
+
+④ Scheduling havuzu  (@Scheduled görevleri)
+     → PaperOrderMatcher (3sn), PricePublisher.broadcast (1sn), MetricsTracker.sample (1sn).
+     → Periyodik, HTTP'den bağımsız.
+
+⑤ ws-reconnect thread  (tek daemon)
+     → WS koparsa üstel geri çekilme ile yeniden bağlanmayı zamanlar.
+
++ Tarayıcı thread'i (frontend): React render + EventSource + axios.
 ```
-Kopma olursa **üstel geri çekilme** (exponential backoff) ile yeniden bağlanır.
+
+**Altın kural:** ② (sıcak yol) asla bloklanmaz; yan etkiler ③/④'e devredilir. Paylaşılan
+yapılar (`ConcurrentHashMap`, `CopyOnWriteArrayList`, `AtomicBoolean`) bu thread'ler arası
+güvenli erişim içindir → ayrıntı **§12 eşzamanlılık haritası**.
 
 ---
 
-## 3) Fiyat Alarmı — Projenin En Kritik Akışı
+## 1) AUTH — Kayıt / Giriş / Yetkili istek
 
-### 3a) Alarm kurma
+### 1.1 Kayıt
 ```
-[AlarmForm] POST /api/alarms  { symbol, targetPrice, direction, type }
-        │
-        ▼
-AlarmController → AlarmService.create(userId)
-        │   1. DB'ye yaz (kalıcı)
-        │   2. AlarmStore.add()  → RAM cache'e ekle (sıcak yol buradan okur)
-        │   3. BinanceWebSocketClient.ensureSubscribed(symbol)
-        │      → feed o sembolü takip etmiyorsa ANINDA SUBSCRIBE gönder (dinamik ingestion)
-        ▼
-AlarmResponse → listede görünür (TanStack Query cache invalidate)
-```
-
-### 3b) Tetikleme (yüksek-throughput sıcak yol)
-```
-Binance @trade/@ticker tick ──► BinanceWebSocketClient ──► RuleEngine.handle(tick)
-        │
-        ▼
-AlarmStore.getBySymbol(tick.symbol)   ← O(1) lookup (ConcurrentHashMap)
-        │
-        ▼ (her alarm için)
-alarm.isTriggeredBy(price, changePercent)?   ← PRICE: fiyat | PERCENT: 24s % eşiği
-        │ evet
-        ▼
-alarm.tryClaimTrigger()   ← AtomicBoolean.compareAndSet → TAM BİR KEZ garantisi
-        │ true (ilk kazanan)
-        ▼
-AlarmStore.remove(alarm)   +   NotificationService.onTriggered(alarm, price)  [@Async]
-        │                                   │
-        │                                   ├─ DB'de alarmı pasifleştir (triggered_at)
-        │                                   ├─ AlarmEventPublisher.publishTriggered(userId, event)
-        │                                   └─ meterRegistry.counter("alarm.triggered")++
-        ▼
-SSE: yalnız alarmın SAHİBİNİN açık bağlantılarına "alarm-triggered" event'i it
+[Thread: ⑥ tarayıcı]
+AuthForm.tsx onSubmit(values)
+  ► lib/api.ts registerUser({username, password})
+      ► axios POST /api/auth/register   Body: {"username":"ali","password":"secret123"}
+[Thread: ① Tomcat nio-exec-N]
+  ► AuthController.register(@Valid RegisterRequest)         // @Valid: username 3-30, password 6-72
+      ► AuthService.register(req)            [@Transactional]
+          ► userRepository.existsByUsername("ali")  ⇒ false
+          ► passwordEncoder.encode("secret123")  ⇒ "$2a$10$..."  (BCrypt, salt'lı)
+          ► userRepository.save(new User("ali", hash))  ⇒ User{id=7}
+          ► jwtService.issue(user)  ⇒ "eyJhbGci..."  (HS256, claim: sub, userId=7, exp=+7g)
+      ⇒ AuthResponse{token, username:"ali"}   HTTP 201
+[Thread: ⑥ tarayıcı]
+  ◄ lib/auth.ts saveAuth(token, username)  → localStorage
+  ◄ useAuth.setAuth() → isAuthenticated=true → App <Terminal/> render
 ```
 
-### 3c) Tarayıcıya ulaşması
+### 1.2 Sonraki yetkili istekler (interceptor)
 ```
-useAlarmStream (EventSource: /api/alarms/stream?access_token=JWT)
-        │  "alarm-triggered" geldi
-        ▼
-   ├─ Sonner toast ("🔔 ALARM TETİKLENDİ")
-   ├─ showSystemNotification() → tarayıcı/OS bildirimi (lib/webpush.ts, service worker)
-   ├─ pushNotification() → bildirim zili listesine ekle
-   └─ queryClient.invalidateQueries(['alarms']) → liste tazelenir, tetiklenen düşer
+lib/api.ts (axios request interceptor):
+   her istekte → header "Authorization: Bearer <token>"   (getToken() localStorage'dan)
+[Thread: ①] Backend SecurityConfig (filter chain):
+   /api/auth/**, /actuator/health, /actuator/prometheus  → permitAll
+   diğer her şey → JWT zorunlu (oauth2ResourceServer.jwt)
+   JwtDecoder token'ı HMAC secret ile doğrular ⇒ Jwt principal
+   Controller: userId(jwt) = ((Number) jwt.getClaim("userId")).longValue()  ⇒ 7
+401 olursa: axios response interceptor UNAUTHORIZED_EVENT yayar → useAuth.logout()
 ```
 
-**Neden bu tasarım?**
-- **In-memory store** = okuma DB'ye gitmez, sıcak yol mikrosaniye seviyesinde.
-- **CAS guard** = aynı anda iki tick gelse bile alarm bir kez tetiklenir (yarış koşulu yok).
-- **@Async** = bildirim/DB işi motoru yavaşlatmaz; motor eşleşmeyi bulur bulmaz devam eder.
-- **SSE** = tek yönlü (server→client) akış için WebSocket'ten daha hafif; tarayıcıda
-  `EventSource` + otomatik reconnect hazır.
-
----
-
-## 4) Paper Trading — MARKET Emir (anında dolar)
-
+### 1.3 Şifre değiştir
 ```
-[OrderForm "Al/Sat" + Piyasa]  POST /api/paper/orders { symbol, side, MARKET, qty }
-        │
-        ▼
-PaperController → PaperTradeService.place()
-        │   • BinancePriceClient.currentPrice(symbol)  ← fiyatı SUNUCUDA çek (istemciye güvenme!)
-        │   • applyFill(): bakiye/pozisyon güncelle (ortalama-maliyet, RoundingMode.HALF_UP)
-        │   • order.status = FILLED, fillPrice, filledAt
-        │   • meterRegistry.counter("paper.order.placed")++
-        ▼
-PaperOrder (FILLED) → DB
-        │
-        ▼
-Tarayıcı: usePaper (4 sn poll) portföyü/emirleri tazeler
+[Thread: ⑥] ProfilePage ► changePassword({currentPassword,newPassword})
+  ► POST /api/account/password   [/api/account/** = JWT zorunlu]
+[Thread: ①] AccountController.changePassword(req, jwt)
+      ► AuthService.changePassword(userId, req)   [@Transactional]
+          ► userRepository.findById(7)
+          ► passwordEncoder.matches(current, hash)?  hayırsa → InvalidCredentialsException (401)
+          ► user.setPasswordHash(encode(new))   // dirty-checking ile UPDATE
+  ⇒ 204 No Content
 ```
 
 ---
 
-## 5) Paper Trading — LIMIT Emir (SUNUCU-TARAFI matcher)
+## 2) PİYASA VERİSİ — Tarayıcı ↔ Binance (backend yok)
+
+`lib/binance.ts` tüm fonksiyonlar **doğrudan** `https://api.binance.com` / `wss://stream.binance.com:443`. [Thread: ⑥ tarayıcı]
 
 ```
-[OrderForm + Limit]  POST /api/paper/orders { LIMIT, price, qty }
-        │
-        ▼
-PaperTradeService.place() → order.status = OPEN (bakiyeye dokunmaz, bekler)
-        │
-        ▼ ───────────── ayrı bir zamanlanmış iş ─────────────
-PaperOrderMatcher  @Scheduled(her 3 sn)
-        │   1. orderRepo.findByStatusAndType(OPEN, LIMIT)
-        │   2. her sembolün anlık fiyatını BinancePriceClient'tan çek (sembol başına 1 kez)
-        │   3. fiyat çizgiyi geçtiyse → PaperTradeService.matchAndFill(orderId, price)
-        │        • BUY: fiyat ≤ limit | SELL: fiyat ≥ limit  → applyFill + FILLED
-        │        • bakiye/pozisyon yetersizse → CANCELLED (sonsuz deneme önlenir)
-        ▼
-DB güncellenir → tarayıcı poll ile "Doldu" görür
+ChartPanel        ► fetchKlines(sym, "1m", 400)  ⇒ Candle[]      + openKlineStream(sym, "1m", cb)
+OrderBook         ► openDepthStream(sym, cb)  → cb({bids,asks})  + openTradeStream (son fiyat)
+RecentTrades      ► fetchTrades(sym,40) + openTradeStream(sym, cb)
+SymbolHeader      ► openTickerStream(sym, cb) → {last,changePercent,high,low,...}
+useMarketTickers  ► fetchTickers() /api/v3/ticker/24hr  [refetchInterval 4000ms]  ⇒ Ticker24h[]
+usePortfolioValue ► fetchPrices([BTCUSDT,...]) /ticker/price?symbols=[...]  ⇒ {sym: price}
+useCoinInfo       ► CoinGecko /coins/{id}  ⇒ {market_cap, supply, ath...}  [staleTime 5dk]
 ```
 
-> **Neden önemli (eskiden client-side'dı):** Artık dolum otoritesi **sunucuda**. Tarayıcı
-> sekmesi kapalı, bilgisayar kapalı olsa bile fiyat hedefe gelince emir dolar. "Demo"yu
-> "ciddi servise" taşıyan en kritik değişiklik buydu.
+**WS yönetimi:** `openXStream` bir `WebSocket` döner; `closeWs(ws)` CONNECTING ise `open`'da
+kapatır (StrictMode çift-mount + hızlı sembol değişiminde "closed before established" uyarısını önler).
+**RAF throttle (OrderBook):** her WS mesajı `latest`'i günceller; `requestAnimationFrame` ile
+ekrana en fazla kare hızında basılır (10Hz akışta gereksiz re-render yok).
 
 ---
 
-## 6) Koşullu Emirler — Stop-Limit / OCO (client-side tetik → server-side dolum)
+## 3) FİYAT ALARMI — uçtan uca (en kritik)
 
+### 3.1 Ingestion (besleme) — uygulama açılışında
 ```
-[OrderForm Stop-Limit/OCO]  → addConditional()  (lib/useConditionalOrders.ts, localStorage)
-        │  (backend'e gitmez; client-side yönetilir)
-        ▼
-useConditionalWatcher  (3 sn poll, fetchPrices)
-        │  stop/tp seviyesi geçildi mi?
-        │     • STOP_LIMIT: stop'a değince → LIMIT emir aç
-        │     • OCO: TP veya stop hangisi önce → o leg'i aç, diğerini iptal et (One-Cancels-Other)
-        ▼
-usePlaceOrder → POST /api/paper/orders (LIMIT)  ──► artık #5'teki sunucu matcher dolduruyor
+[Thread: main → ② WS IO]
+ApplicationReadyEvent
+  ► BinanceWebSocketClient.start() ► connect()
+      ► container.connectToServer(ExchangeEndpoint, wss://stream.binance.com:443/ws)
+  ► ExchangeEndpoint.onOpen(session)            [Thread: ② WS IO]
+      ► session.addMessageHandler(String, this::onMessage)
+      ► subscribe(session) ► sendSubscribe(session, symbols)   // symbols = ConcurrentHashMap.newKeySet()
+          payload: {"method":"SUBSCRIBE","params":["btcusdt@trade","btcusdt@ticker",...],"id":N}
+[Thread: ① main] AlarmStoreLoader.loadActiveAlarms()  [ApplicationReadyEvent]
+  ► alarmRepository.findByActiveTrue()  ⇒ List<Alarm>
+  ► her alarm → alarmStore.add(alarm)
+  ► distinct semboller → webSocketClient.ensureSubscribed(sym)   // config dışı semboller de
 ```
-> Tetik client-side (uygulama açıkken), ama LIMIT'e dönüşünce dolum sunucuya devreder.
+
+### 3.2 Her tick — SICAK YOL  [Thread: ② WS IO]
+```
+ExchangeEndpoint onMessage(json)
+  ► BinancePriceParser.parse(json)  ⇒ Optional<PriceTick>
+       "trade"  → PriceTick(symbol, price=p, changePercent=null)
+       "24hrTicker" → PriceTick(symbol, price=c, changePercent=P)
+  ► her PriceTickHandler.handle(tick):     // liste: [RuleEngine, PriceCache, MetricsTracker]
+     ┌─ RuleEngine.handle(tick)
+     │     ► AlarmStore.getBySymbol(tick.symbol())  ⇒ List<Alarm>   // O(1) ConcurrentHashMap
+     │     ► boşsa return
+     │     ► her alarm:
+     │         alarm.isTriggeredBy(price, changePercent)?
+     │             PRICE:  ABOVE → price>=target | BELOW → price<=target
+     │             PERCENT: ABOVE → cp>=esik | BELOW → cp<=-esik (cp null ise false → @trade atlar)
+     │         evetse ► alarm.tryClaimTrigger()  // AtomicBoolean.compareAndSet(false,true)
+     │             true (ilk kazanan):
+     │                ► AlarmStore.remove(alarm)        // CopyOnWriteArrayList → iterasyonda güvenli
+     │                ► triggerHandler.onTriggered(alarm, price)   // = NotificationService → ③'e atlar
+     ├─ PriceCache.handle(tick)  → map[symbol]=PriceQuote  (son fiyat snapshot)
+     └─ MetricsTracker.handle(tick) → totalTicks.incrementAndGet()
+```
+
+### 3.3 Tetikleme sonrası — async hand-off  [Thread: ③ notificationExecutor]
+```
+NotificationService.onTriggered(alarm, triggerPrice)   [@Async("notificationExecutor") @Transactional]
+  ► notifyExternal(...)  → log (ileride Telegram/mail buraya)
+  ► alarmRepository.deactivate(alarm.getId(), now)   // is_active=false, triggered_at=now
+  ► AlarmEventPublisher.publishTriggered(userId, AlarmTriggeredEvent.of(alarm, triggerPrice))
+        emittersByUser : Map<Long, CopyOnWriteArrayList<SseEmitter>>
+        ► emittersByUser.get(userId) → her emitter.send(event().name("alarm-triggered").data(event))
+        ► IOException/IllegalState (istemci gitmiş) → emitter.complete() → onCompletion listeden siler
+  ► meterRegistry.counter("alarm.triggered").increment()
+```
+> ② motoru burada **beklemez** — eşleşmeyi bulup `onTriggered`'ı ③ havuzuna fırlatır, sonraki tick'e geçer.
+
+### 3.4 Tarayıcıya ulaşma (SSE)  [Thread: ⑥ tarayıcı]
+```
+useAlarmStream  → new EventSource("/api/alarms/stream?access_token=<JWT>")
+   // EventSource header gönderemez → token query param (SecurityConfig bearerTokenResolver buna izinli)
+  addEventListener("alarm-triggered", e):
+     a = JSON.parse(e.data)  // {symbol, targetPrice, direction, triggerPrice, triggeredAt}
+     ► toast.success("🔔 ALARM TETİKLENDİ")
+     ► showSystemNotification(...)        // lib/webpush.ts → service worker.showNotification (OS bildirimi)
+     ► pushNotification(...)              // bildirim zili store (useNotifications)
+     ► queryClient.invalidateQueries(['alarms'])  // liste yeniden çekilir; tetiklenen düşer
+```
+
+**Backend tarafı (controller):**  [Thread: ① Tomcat — sonra async tutulur]
+```
+AlarmController.stream(jwt)  [GET /api/alarms/stream, produces text/event-stream]
+  ► AlarmEventPublisher.subscribe(userId)
+       emitter = new SseEmitter(30dk)
+       emittersByUser[userId].add(emitter)
+       onCompletion/onError → removeEmitter ; onTimeout → emitter.complete()+remove (WARN basmaz)
+  ⇒ SseEmitter
+```
 
 ---
 
-## 7) Portföy & PnL
+## 4) PAPER — MARKET emir (anında)  [Thread: ① Tomcat]
 
 ```
-usePortfolio (GET /api/paper/portfolio, 4 sn)  → { usdtBalance, positions[] }
-        │
-        ▼
-usePortfolioValue: pozisyonların CANLI fiyatlarını fetchPrices ile çek (3 sn)
-        │   • value = qty × currentPrice
-        │   • pnl = value − (avgPrice × qty)   (gerçekleşmemiş)
-        │   • equity = USDT + Σ pozisyon değeri
-        ▼
-BalancePanel / PortfolioPage / BottomTabs(Pozisyonlar)
-
-Analiz sekmesi (useTradeAnalytics): FILLED emirlerden ortalama-maliyet yöntemiyle
-GERÇEKLEŞMİŞ PnL, win-rate, en iyi/kötü işlem, günlük PnL → recharts grafikleri.
-```
-
----
-
-## 8) Canlı Fiyat Yayını (PriceCache → SSE)
-
-```
-Binance tick → PriceCache (her sembolün son fiyatı, RAM)
-        │
-        ▼
-PricePublisher  @Scheduled(her 1 sn)  ← throttle (tick saniyede onlarca gelse de 1 yayın)
-        │   snapshot'ı tüm abonelere "prices" event'i ile it
-        ▼
-Tarayıcı EventSource → fiyatlar (kullanıcıya özel değil, ortak yayın)
+[⑥] OrderForm.onSubmit ► usePlaceOrder.mutate({symbol,side:"BUY",type:"MARKET",qty})
+  ► POST /api/paper/orders
+[①] PaperController.place(req, jwt) ► PaperTradeService.place(req, userId)  [@Transactional]
+      symbol="BTCUSDT" → asset="BTC" (son 4 harf USDT kontrolü, değilse PaperTradeException)
+      type==MARKET:
+        ► BinancePriceClient.currentPrice("BTCUSDT")   // SUNUCUDA REST /ticker/price; istemciye güvenME
+             ⇒ 107432.10
+        ► applyFill(userId, "BTC", BUY, qty, 107432.10):
+             notional = qty*price
+             BUY:  bakiye<notional → PaperTradeException("Yetersiz bakiye")
+                   account.usdtBalance -= notional
+                   pozisyon yok → positionRepo.save(new PaperPosition(qty, price))
+                   pozisyon var → newAvg = (eskiQty*eskiAvg + notional)/newQty  [HALF_UP, scale 8]
+             SELL: pozisyon yok/yetersiz → PaperTradeException
+                   account.usdtBalance += notional ; qty düş (0 ise pozisyonu sil)
+        ► order.status=FILLED, price=fillPrice=107432.10, filledAt=now
+      ► meterRegistry.counter("paper.order.placed","type","MARKET","side","BUY").increment()
+      ► orderRepo.save(order)  ⇒ PaperOrder
+[⑥] ◄ onSuccess → queryClient.invalidateQueries(['paper'])  // portföy/emirler tazelenir
+     usePortfolio & usePaperOrders [refetchInterval 4000] zaten poll'luyor
 ```
 
 ---
 
-## 9) Metrikler (Micrometer → Prometheus)
+## 5) PAPER — LIMIT emir + SUNUCU-TARAFI matcher
+
+### 5.1 Emir verme (açık bekler)  [Thread: ① Tomcat]
+```
+PaperTradeService.place(LIMIT):
+   price yok/≤0 → PaperTradeException
+   order.status=OPEN, price=hedef   // bakiyeye DOKUNMAZ
+   counter("paper.order.placed","type","LIMIT",...)++ ; save
+```
+
+### 5.2 Eşleştirici (ayrı zamanlı iş — otorite sunucuda)  [Thread: ④ scheduling]
+```
+PaperOrderMatcher.matchOpenLimitOrders()   @Scheduled(fixedDelayString="${paper.matcher.interval-ms:3000}")
+  ► orderRepo.findByStatusAndType(OPEN, LIMIT)  ⇒ List<PaperOrder>  (boşsa return)
+  ► distinct semboller → her biri için BinancePriceClient.currentPrice(sym)
+        Map<symbol, price>  (sembol başına TEK REST çağrısı; hata → o sembol atlanır, log.debug)
+  ► her order:
+        price = map[order.symbol]  (null → atla)
+        ► PaperTradeService.matchAndFill(order.id, price)   [@Transactional]
+             tekrar yükle; OPEN/LIMIT/price var değilse return
+             crossed? BUY: price<=limit | SELL: price>=limit   (değilse return)
+             try  applyFill(...) → FILLED, fillPrice=limit, filledAt
+             catch PaperTradeException → status=CANCELLED   // yetersiz bakiye/pozisyon: sonsuz deneme önlenir
+        ► exception → log.warn, sıradakine devam
+```
+> Sekme/bilgisayar kapalı olsa bile dolum olur — **dolum kararı artık istemcide değil.**
+
+---
+
+## 6) PAPER — Stop-Limit / OCO (client tetik → server dolum)  [Thread: ⑥ tarayıcı → ① backend]
 
 ```
-MetricsConfig (MeterBinder) gauge'lar:
-  • alarm.engine.ticks_per_second   ← MetricsTracker
-  • alarm.engine.ticks_total
-  • alarm.active                    ← AlarmStore.activeCount()
-  • exchange.ws.connected (1/0)     ← BinanceWebSocketClient.isConnected()
-Sayaçlar:
-  • alarm.triggered                 ← NotificationService
-  • paper.order.placed{type,side}   ← PaperTradeService
-        │
-        ▼
-GET /actuator/prometheus  → Prometheus çeker → Grafana çizer
+OrderForm (Stop-Limit/OCO) ► addConditional({symbol,side,kind,qty,stopPrice,limitPrice,tpPrice?})
+   → useConditionalOrders store (modül-seviyesi + localStorage, listeners Set)
+useConditionalWatcher()  [useQuery fetchPrices, refetchInterval 3000]
+  ► her conditional için triggered(o, price):
+       STOP_LIMIT: BUY price>=stop | SELL price<=stop  → {limit: limitPrice}
+       OCO: TP (SELL price>=tp | BUY price<=tp) → {limit: tpPrice}
+            yoksa STOP (SELL price<=stop | BUY price>=stop) → {limit: limitPrice}
+  ► firedRef ile çift-tetik engeli
+  ► usePlaceOrder.mutate({type:"LIMIT", price: t.limit, ...})  → #5 sunucu matcher (④) devralır
+  ► toast + removeConditional(id)   (hata → fired geri al, tekrar dene)
+```
+"Koşullu" sekmesi (`BottomTabs`) bu store'u gösterir + tek tek iptal.
+
+---
+
+## 7) PORTFÖY & PnL  [Thread: ⑥ tarayıcı; veri ① backend + Binance]
+
+```
+usePortfolio   GET /api/paper/portfolio  ⇒ {usdtBalance, positions:[{asset,qty,avgPrice}]}
+usePortfolioValue:
+   symbols = positions.map(p => p.asset+"USDT")
+   ► fetchPrices(symbols)  [refetchInterval 3000]   ⇒ canlı fiyatlar (Binance, doğrudan)
+   her pozisyon zenginleştir:
+       value = currentPrice*qty
+       pnl   = value - avgPrice*qty          (gerçekleşmemiş)
+       pnlPct= pnl/(avgPrice*qty)*100
+   equity = usdtBalance + Σ value ; totalPnl = Σ pnl
+   ⇒ BalancePanel, PortfolioPage, BottomTabs(Pozisyonlar, footer toplam)
+
+useTradeAnalytics (Analiz sekmesi):
+   FILLED emirleri zamana göre sırala → varlık bazında "kitap" {qty, avg}
+       BUY  → avg güncelle (ortalama-maliyet)
+       SELL → realized = (fillPrice - avg)*qty   → trades[]
+   metrikler: realizedPnl, winRate=wins/total, best/worst, daily[] (son 14 gün)
+   ⇒ recharts AreaChart (equity) + BarChart (günlük PnL)
 ```
 
 ---
 
-## 10) Şema Yönetimi (Flyway)
+## 8) CANLI FİYAT YAYINI (PriceCache → SSE)
 
 ```
-Uygulama açılışı:
-  Flyway → db/migration/V1__init.sql çalıştır (versiyonlu, kalıcı)
-        │   • boş DB: V1 tabloları kurar
-        │   • mevcut DB: baseline-on-migrate → V1 atlanır, baseline'lanır
-        ▼
-  Hibernate ddl-auto: validate → entity ↔ şema uyumunu DOĞRULAR (drift yakalar)
+[Thread: ② WS IO] PriceCache.handle(tick) → ConcurrentHashMap[symbol]=PriceQuote
+[Thread: ④ scheduling] PricePublisher.broadcast()  @Scheduled(fixedRate=1000)   // throttle: saniyede 1
+   emitters boşsa return
+   snapshot = priceCache.snapshot()
+   her emitter.send(event().name("prices").data(snapshot))   // hata → complete()
+[Thread: ① Tomcat] PricePublisher.subscribe(): yeni abone HEMEN mevcut snapshot'ı alır (UI anında dolsun)
 ```
-> Eskiden `ddl-auto: update` (Hibernate şemayı kafasına göre değiştirirdi). Artık şema
-> sahibi Flyway; her değişiklik `V2__...sql`, `V3__...sql` olarak izlenir/geri alınabilir.
+> Tick saniyede onlarca (②); yayın **saniyede 1** (④) → frontend boğulmaz. Fiyatlar ortak (kullanıcıya özel değil).
 
 ---
 
-## 11) Test Akışı (doğrulama)
+## 9) METRİKLER (Micrometer → Prometheus)
+
+```
+MetricsConfig.engineMetrics(MeterBinder):
+   Gauge alarm.engine.ticks_per_second ← MetricsTracker.getTicksPerSecond()
+        ([④] MetricsTracker.sample() @Scheduled(1000): ticksPerSecond = total - lastSampleTotal)
+   Gauge alarm.engine.ticks_total      ← getTotalTicks()
+   Gauge alarm.active                  ← AlarmStore.activeCount()
+   Gauge exchange.ws.connected         ← BinanceWebSocketClient.isConnected() ? 1 : 0
+Counter alarm.triggered          ← [③] NotificationService.onTriggered
+Counter paper.order.placed{type,side} ← [①] PaperTradeService.place
+GET /actuator/prometheus  → metin formatı → Prometheus scrape → Grafana
+```
+
+---
+
+## 10) ŞEMA (Flyway) + başlangıç sırası  [Thread: ① main boot]
+
+```
+Spring Boot başlatma sırası:
+  1. DataSource hazır
+  2. Flyway autoconfigure → db/migration/V1__init.sql
+        boş DB:      V1 çalışır (5 tablo + index oluşur)
+        dolu DB:     baseline-on-migrate → V1 atlanır, flyway_schema_history baseline'lanır
+  3. Hibernate EntityManagerFactory → ddl-auto: validate
+        entity ↔ tablo kolon/tip uyumunu kontrol eder; uyumsuzsa BAŞLAMAZ (drift erken yakalanır)
+  4. ApplicationReadyEvent → WS bağlan (② başlar) + alarm store yükle
+```
+
+---
+
+## 11) TEST AKIŞI
 
 ```
 ./gradlew test
-   ├─ Unit (Mockito): PaperTradeServiceTest, RuleEngineTest   → izole mantık, DB yok
-   └─ Integration (Testcontainers): AuthControllerIT, contextLoads
-         → gerçek PostgreSQL konteyneri (@ServiceConnection) + Flyway + Spring context
-         → Docker yoksa zarifçe ATLANIR (@Testcontainers disabledWithoutDocker)
-GitHub Actions (.github/workflows/ci.yml): her push'ta ubuntu'da otomatik koşar.
+  Unit (MockitoExtension):
+     PaperTradeServiceTest: @Mock repolar + @Spy SimpleMeterRegistry, @InjectMocks service
+        → "2 BTC @100 al → bakiye -200, avg=100" gibi assertion'lar (DB yok, ms'ler)
+     RuleEngineTest: alarm eşleşme + tek-kez tetik
+  Integration (@SpringBootTest @Testcontainers(disabledWithoutDocker=true)):
+     AbstractIntegrationTest: @Container PostgreSQLContainer + @ServiceConnection (datasource auto)
+     CryptoalarmApplicationTests.contextLoads: gerçek DB + Flyway + tüm context boot
+     AuthControllerIT (@AutoConfigureMockMvc): register→201+token, login→200+token, /api/alarms→401
+  Docker yoksa IT'ler ATLANIR; CI (.github/workflows/ci.yml) ubuntu'da Docker'lı koşar.
 ```
 
 ---
 
-## Tasarım Kararları — Tek Bakışta
+## 12) Eşzamanlılık (concurrency) haritası — thread'ler ayrı ayrı
 
-| Karar | Neden |
-|-------|-------|
-| Piyasa verisi doğrudan Binance'ten (tarayıcı) | Backend'i ağır/anonim trafikten kurtarır |
-| In-memory AlarmStore (RAM) | Sıcak yolda DB okuması yok → mikrosaniye eşleştirme |
-| `AtomicBoolean.compareAndSet` | Eşzamanlı tick'lerde **tam bir kez** tetikleme |
-| `@Async` bildirim | Motor bildirimi/DB'yi beklemez, throughput korunur |
-| SSE (WebSocket değil) | Tek yönlü akış için daha az kod + tarayıcı reconnect'i hazır |
-| Sunucu-tarafı LIMIT matcher | Dolum otoritesi sunucuda; sekme kapalı olsa da çalışır |
-| Dinamik WS aboneliği | Feed sabit listeyle sınırlı değil; alarm kurulan her sembol |
-| Flyway + validate | Şema versiyonlu, geri alınabilir; drift derhal yakalanır |
-| Testcontainers | Gerçek DB'ye karşı test, sıfır kurulum, her yerde çalışır |
+| Bölge | Thread | Veri yapısı | Neden |
+|-------|--------|-------------|-------|
+| Tick eşleştirme | ② WS IO | `ConcurrentHashMap<String, CopyOnWriteArrayList<Alarm>>` | Lock-free okuma; yayınla mutasyon güvenli |
+| Tek-kez tetik | ② WS IO | `AtomicBoolean` (alarm başına) | `compareAndSet` ile yarış koşulsuz |
+| Bildirim/DB/SSE push | ③ notificationExecutor | — | Motoru (②) yavaşlatmamak |
+| SSE abone listesi | ① Tomcat + ③ | `Map<Long, CopyOnWriteArrayList<SseEmitter>>` | Farklı thread'lerden ekle/yayınla güvenli |
+| Limit matcher | ④ scheduling | DB sorgusu + @Transactional | Sunucu otoritesi, periyodik 3sn |
+| Fiyat yayını | ④ scheduling | `ConcurrentHashMap` snapshot | Throttle 1sn |
+| WS sembol seti | main + ② + ① | `ConcurrentHashMap.newKeySet()` | Dinamik abonelik thread-safe |
+| Reconnect zamanlama | ⑤ ws-reconnect | tek daemon executor | Üstel geri çekilme |
+| HTTP istekleri | ① Tomcat nio-exec-* | thread-per-request | Standart servlet modeli |
+
+**Thread'ler arası geçiş noktaları (kritik):**
+- ② → ③ : `triggerHandler.onTriggered` `@Async` olduğu için çağrı anında ③ havuzuna devreder (②'yi bloklamaz).
+- ② → ④ : doğrudan yok; ④ kendi tetiklenir (matcher/publisher) ama ②'nin yazdığı `PriceCache`/`AlarmStore`'u okur.
+- ① → SSE: istek async'e geçer, Tomcat thread'i serbest kalır; emitter ③/④'ten beslenir.
 
 ---
 
-*Proje: github.com/ataberk388-ux/min-tradeof — Java 21 · Spring Boot 3.5 · React 19 · PostgreSQL*
+## 13) "Hangi tech, nerede, neden" özet
+
+| Teknoloji | Nerede | Neden |
+|-----------|--------|-------|
+| Spring Security OAuth2 RS + JWT | `SecurityConfig`, `JwtService` | Stateless, ölçeklenir; sunucuda oturum yok |
+| BCrypt | `AuthService` | Salt'lı, yavaş hash → brute-force'a dirençli |
+| `jakarta.websocket` | `BinanceWebSocketClient` | Kalıcı tek bağlantı + dinamik SUBSCRIBE |
+| In-memory store | `InMemoryAlarmStore` | Sıcak yolda DB yok; arayüz sayesinde yarın Redis'e taşınabilir |
+| `AtomicBoolean` CAS | `Alarm.tryClaimTrigger` | Tam-bir-kez tetik |
+| `@Async` | `NotificationService` | Sıcak yolu bloklamayan yan etki |
+| SSE | `AlarmEventPublisher`, `PricePublisher` | Tek yönlü push; WS'ten hafif |
+| `@Scheduled` | `PaperOrderMatcher`, `PricePublisher`, `MetricsTracker` | Periyodik: dolum, yayın, örnekleme |
+| Spring Data JPA | `repository/` | Boilerplate'siz CRUD + türetilmiş sorgular |
+| Flyway | `db/migration` | Versiyonlu, geri-alınabilir şema; drift kontrolü |
+| Micrometer/Prometheus | `MetricsConfig` | Üretim gözlemlenebilirliği |
+| Testcontainers | `AbstractIntegrationTest` | Gerçek DB'ye karşı, sıfır-kurulum test |
+| TanStack Query | `hooks/` | Server-state cache + otomatik refetch |
+| EventSource | `useAlarmStream` | Tarayıcıda hazır SSE + auto-reconnect |
+| lightweight-charts | `ChartPanel` | Hafif, performanslı TradingView grafiği |
+| Vite code-split | `TradingTerminal` lazy | İlk açılış bundle'ı küçük |
+
+---
+
+*github.com/ataberk388-ux/min-tradeof — Java 21 · Spring Boot 3.5 · React 19 · PostgreSQL 16*
