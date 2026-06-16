@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowDown, ArrowUp } from 'lucide-react'
+import { ArrowDown, ArrowUp, TrendingDown, TrendingUp } from 'lucide-react'
 import {
   closeWs,
   openDepthStream,
@@ -369,7 +369,7 @@ function Row({
       onClick={onClick}
       onMouseEnter={(e) => onHover(e, lvl)}
       onMouseMove={(e) => onHover(e, lvl)}
-      className="relative grid cursor-pointer grid-cols-3 px-3 py-[3px] font-mono text-[11px] tabular-nums hover:bg-bn-line/40"
+      className="group relative grid cursor-pointer grid-cols-3 px-3 py-[3px] font-mono text-[11px] tabular-nums hover:bg-bn-line/40"
     >
       {/* Birikimli derinlik bar'i (Binance) — saga dogru kumulatif hacim orani */}
       <div
@@ -387,6 +387,18 @@ function Row({
       </span>
       <span className="relative text-right text-bn-txt">{fmtQty(symbol, lvl.qty)}</span>
       <span className="relative text-right text-bn-sub">{fmtQty(symbol, lvl.total)}</span>
+
+      {/* Hover'da ikonlu aksiyon rozeti (Binance): ask -> Sat, bid -> Al; tikla = fiyati kullan */}
+      <span
+        className={`pointer-events-none absolute right-1.5 top-1/2 z-10 hidden -translate-y-1/2 items-center gap-1 rounded px-1.5 py-0.5 text-[9px] font-semibold shadow-sm ring-1 group-hover:flex ${
+          side === 'ask'
+            ? 'bg-bn-down/20 text-bn-down ring-bn-down/30'
+            : 'bg-bn-up/20 text-bn-up ring-bn-up/30'
+        }`}
+      >
+        {side === 'ask' ? <TrendingDown className="h-3 w-3" /> : <TrendingUp className="h-3 w-3" />}
+        {side === 'ask' ? 'Sat' : 'Al'}
+      </span>
     </div>
   )
 }
