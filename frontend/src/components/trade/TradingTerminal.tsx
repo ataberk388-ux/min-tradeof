@@ -8,10 +8,6 @@ import { OrderForm } from '@/components/trade/OrderForm'
 import { RecentTrades } from '@/components/trade/RecentTrades'
 import { SymbolHeader } from '@/components/trade/SymbolHeader'
 import { TerminalTopbar } from '@/components/trade/TerminalTopbar'
-import { ActiveSymbolProvider } from '@/hooks/useActiveSymbol'
-import { OrderTicketProvider } from '@/hooks/useOrderTicket'
-import { useAlarmStream } from '@/hooks/useAlarmStream'
-import { useExchangeInfo } from '@/hooks/useExchangeInfo'
 
 /** Dikey panel kenari (yatay PanelGroup icinde) — surukle ile genislik ayari. */
 function VHandle() {
@@ -27,14 +23,9 @@ function HHandle() {
   )
 }
 
-/** Binance spot tarzi trading terminali — surukle ile boyutlandirilabilir paneller. */
-export function TradingTerminal() {
-  useAlarmStream()
-  useExchangeInfo()
-
+/** Masaustu Binance spot duzeni — surukle ile boyutlandirilabilir paneller. */
+export function DesktopTerminal() {
   return (
-    <ActiveSymbolProvider>
-      <OrderTicketProvider>
       <div className="flex h-screen flex-col overflow-hidden bg-bn-bg text-bn-txt">
         <TerminalTopbar />
         <SymbolHeader />
@@ -86,7 +77,5 @@ export function TradingTerminal() {
           </PanelGroup>
         </div>
       </div>
-      </OrderTicketProvider>
-    </ActiveSymbolProvider>
   )
 }

@@ -11,6 +11,13 @@
       rel="stylesheet"
     />
     <title>Crypto Alarm</title>
+    <script>
+      // Ilk boyadan once temayi uygula (flash onleme)
+      try {
+        if (localStorage.getItem('cryptoalarm.theme') === 'light')
+          document.documentElement.classList.remove('dark')
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

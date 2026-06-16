@@ -57,6 +57,65 @@ export function bollinger(values: number[], period = 20, mult = 2): Bollinger {
   return { upper, middle, lower }
 }
 
+export interface Macd {
+  macd: (number | null)[]
+  signal: (number | null)[]
+  hist: (number | null)[]
+}
+
+/** MACD = EMA(fast) - EMA(slow); signal = EMA(macd); hist = macd - signal. */
+export function macd(values: number[], fast = 12, slow = 26, signalPeriod = 9): Macd {
+  const emaFast = ema(values, fast)
+  const emaSlow = ema(values, slow)
+  const macdLine = values.map((_, i) =>
+    emaFast[i] != null && emaSlow[i] != null ? (emaFast[i] as number) - (emaSlow[i] as number) : null,
+  )
+  const signal: (number | null)[] = new Array(values.length).fill(null)
+  const firstValid = macdLine.findIndex((v) => v != null)
+  if (firstValid >= 0) {
+    const slice = macdLine.slice(firstValid).map((v) => v as number)
+    const sig = ema(slice, signalPeriod)
+    for (let i = 0; i < sig.length; i++) signal[firstValid + i] = sig[i]
+  }
+  const hist = macdLine.map((v, i) =>
+    v != null && signal[i] != null ? v - (signal[i] as number) : null,
+  )
+  return { macd: macdLine, signal, hist }
+}
+
+export interface Signal {
+  label: 'AL' | 'SAT' | 'BEKLE'
+  bullish: number
+  bearish: number
+}
+
+/** RSI + MACD + MA(20) birlestirip AL/SAT/BEKLE skoru uretir. */
+export function computeSignal(closes: number[]): Signal {
+  const r = rsi(closes, 14).at(-1) ?? null
+  const m = macd(closes)
+  const macdLast = m.macd.at(-1) ?? null
+  const sigLast = m.signal.at(-1) ?? null
+  const maLast = sma(closes, 20).at(-1) ?? null
+  const price = closes.at(-1) ?? null
+
+  let bull = 0
+  let bear = 0
+  if (r != null) {
+    if (r < 35) bull++
+    else if (r > 65) bear++
+  }
+  if (macdLast != null && sigLast != null) {
+    if (macdLast > sigLast) bull++
+    else bear++
+  }
+  if (maLast != null && price != null) {
+    if (price > maLast) bull++
+    else bear++
+  }
+  const label = bull > bear ? 'AL' : bear > bull ? 'SAT' : 'BEKLE'
+  return { label, bullish: bull, bearish: bear }
+}
+
 /** RSI (Wilder). 0-100. */
 export function rsi(values: number[], period = 14): (number | null)[] {
   const out: (number | null)[] = []

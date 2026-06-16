@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { API_BASE_URL } from '@/lib/api'
 import { useAuth } from '@/hooks/useAuth'
+import { pushNotification } from '@/hooks/useNotifications'
 import type { AlarmDirection } from '@/lib/schema'
 
 /** Backend'in SSE ile ittigi tetikleme olayi (AlarmTriggeredEvent). */
@@ -36,6 +37,7 @@ export function useAlarmStream() {
       toast.success(`🔔 ALARM TETİKLENDİ`, {
         description: `${a.symbol} ${op} ${a.targetPrice} — anlık fiyat: ${a.triggerPrice}`,
       })
+      pushNotification(`🔔 ${a.symbol} ${op} ${a.targetPrice} tetiklendi (${a.triggerPrice})`)
       queryClient.invalidateQueries({ queryKey: ['alarms'] })
     })
 

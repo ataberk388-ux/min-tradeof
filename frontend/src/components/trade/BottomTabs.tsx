@@ -69,7 +69,8 @@ function OrdersTable({ orders, cancellable }: { orders: PaperOrder[]; cancellabl
     })
 
   return (
-    <table className="w-full text-xs">
+    <div className="overflow-x-auto">
+    <table className="w-full min-w-[460px] text-xs">
       <thead>
         <tr className="text-left text-[10px] uppercase tracking-wide text-bn-sub">
           <th className="px-3 py-1.5 font-medium">Çift</th>
@@ -125,6 +126,7 @@ function OrdersTable({ orders, cancellable }: { orders: PaperOrder[]; cancellabl
         ))}
       </tbody>
     </table>
+    </div>
   )
 }
 
@@ -134,7 +136,8 @@ function PositionsTable() {
     return <p className="p-4 text-center text-xs text-bn-sub">Açık pozisyon yok</p>
   }
   return (
-    <table className="w-full text-xs">
+    <div className="overflow-x-auto">
+    <table className="w-full min-w-[460px] text-xs">
       <thead>
         <tr className="text-left text-[10px] uppercase tracking-wide text-bn-sub">
           <th className="px-3 py-1.5 font-medium">Varlık</th>
@@ -169,5 +172,6 @@ function PositionsTable() {
         })}
       </tbody>
     </table>
+    </div>
   )
 }

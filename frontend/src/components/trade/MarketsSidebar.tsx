@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Search, Star } from 'lucide-react'
 import { useMarketTickers } from '@/hooks/useMarketTickers'
 import { useFavorites } from '@/hooks/useFavorites'
@@ -9,12 +9,27 @@ import { Sparkline } from '@/components/trade/Sparkline'
 
 type Tab = 'fav' | 'usdt' | 'gainers' | 'losers'
 
-export function MarketsSidebar() {
+export function MarketsSidebar({ onSelect }: { onSelect?: () => void } = {}) {
   const { data: tickers } = useMarketTickers()
   const { symbol, setSymbol } = useActiveSymbol()
   const { toggle, isFavorite } = useFavorites()
   const [tab, setTab] = useState<Tab>('usdt')
   const [query, setQuery] = useState('')
+  const searchRef = useRef<HTMLInputElement>(null)
+
+  // Klavye kisayolu: "/" arama kutusunu odaklar (zaten yaziyorken degil)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== '/') return
+      const el = document.activeElement
+      const typing = el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement
+      if (typing) return
+      e.preventDefault()
+      searchRef.current?.focus()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   const rows = useMemo(() => {
     const list = tickers ?? []
@@ -36,9 +51,10 @@ export function MarketsSidebar() {
         <div className="relative">
           <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-bn-sub" />
           <input
+            ref={searchRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Ara"
+            placeholder="Ara  ( / )"
             className="w-full rounded border border-bn-line bg-bn-panel2 py-1.5 pl-7 pr-2 text-xs text-bn-txt outline-none placeholder:text-bn-sub focus:border-bn-gold/50"
           />
         </div>
@@ -78,7 +94,10 @@ export function MarketsSidebar() {
             return (
               <button
                 key={t.symbol}
-                onClick={() => setSymbol(t.symbol)}
+                onClick={() => {
+                  setSymbol(t.symbol)
+                  onSelect?.()
+                }}
                 className={`grid w-full grid-cols-[minmax(0,1fr)_auto_44px] items-center gap-2 px-3 py-1.5 text-xs transition hover:bg-bn-line/50 ${
                   active ? 'bg-bn-line/60' : ''
                 }`}

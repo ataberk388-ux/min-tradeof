@@ -1,11 +1,11 @@
 import { AuthForm } from '@/components/AuthForm'
-import { TradingTerminal } from '@/components/trade/TradingTerminal'
+import { Terminal } from '@/components/trade/Terminal'
 import { useAuth } from '@/hooks/useAuth'
 
 function App() {
   const { isAuthenticated } = useAuth()
-  // Token yoksa giris ekrani; varsa Binance spot trading terminali.
-  return isAuthenticated ? <TradingTerminal /> : <AuthForm />
+  // Token yoksa giris ekrani; varsa terminal (genis ekran: panel duzeni, dar ekran: mobil).
+  return isAuthenticated ? <Terminal /> : <AuthForm />
 }
 
 export default App

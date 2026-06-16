@@ -45,6 +45,23 @@ public class AlarmService {
         return alarmRepository.findActiveByUserOrdered(userId);
     }
 
+    /**
+     * Aktif bir alarmin hedef fiyat/yonunu gunceller. Sembol degismez.
+     * RAM cache'i tutarli tutmak icin cikar-guncelle-ekle yapilir.
+     */
+    @Transactional
+    public Alarm update(Long id, CreateAlarmRequest request, Long userId) {
+        Alarm alarm = alarmRepository.findById(id)
+                .filter(a -> a.getUserId().equals(userId) && a.isActive())
+                .orElseThrow(() -> new AlarmNotFoundException(id));
+        alarmStore.remove(alarm);
+        alarm.setTargetPrice(request.targetPrice());
+        alarm.setDirection(request.direction());
+        Alarm saved = alarmRepository.save(alarm);
+        alarmStore.add(saved);
+        return saved;
+    }
+
     /** Bir kullanicinin tetiklenmis (gecmis) alarmlari, en yeni once. */
     @Transactional(readOnly = true)
     public List<Alarm> listHistory(Long userId) {

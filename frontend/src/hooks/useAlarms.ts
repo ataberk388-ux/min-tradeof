@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { createAlarm, deleteAlarm, listAlarms, reorderAlarms } from '@/lib/api'
+import { createAlarm, deleteAlarm, listAlarms, reorderAlarms, updateAlarm } from '@/lib/api'
+import type { CreateAlarmInput } from '@/lib/schema'
 
 const ALARMS_KEY = ['alarms'] as const
 
@@ -29,6 +30,14 @@ export function useDeleteAlarm() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: deleteAlarm,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ALARMS_KEY }),
+  })
+}
+
+export function useUpdateAlarm() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, input }: { id: number; input: CreateAlarmInput }) => updateAlarm(id, input),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ALARMS_KEY }),
   })
 }

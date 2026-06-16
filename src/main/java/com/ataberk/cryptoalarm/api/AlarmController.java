@@ -45,6 +45,13 @@ public class AlarmController {
                 .toList();
     }
 
+    @PutMapping("/{id}")
+    public AlarmResponse update(@PathVariable Long id,
+                                @Valid @RequestBody CreateAlarmRequest request,
+                                @AuthenticationPrincipal Jwt jwt) {
+        return AlarmResponse.from(alarmService.update(id, request, userId(jwt)));
+    }
+
     @GetMapping("/history")
     public List<AlarmResponse> history(@AuthenticationPrincipal Jwt jwt) {
         return alarmService.listHistory(userId(jwt)).stream()

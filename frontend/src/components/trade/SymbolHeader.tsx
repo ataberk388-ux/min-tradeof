@@ -1,6 +1,7 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { closeWs, openTickerStream, type SymbolTicker } from '@/lib/binance'
 import { useActiveSymbol } from '@/hooks/useActiveSymbol'
+import { useSignal } from '@/hooks/useSignal'
 import { formatCompact } from '@/lib/format'
 import { fmtPrice } from '@/lib/symbolFormat'
 import { CoinIcon } from '@/components/trade/CoinIcon'
@@ -9,13 +10,35 @@ import { CoinIcon } from '@/components/trade/CoinIcon'
 export function SymbolHeader() {
   const { debouncedSymbol: symbol } = useActiveSymbol()
   const [t, setT] = useState<SymbolTicker | null>(null)
+  const [live, setLive] = useState(false)
+  const [flash, setFlash] = useState('')
+  const prevPrice = useRef<number | null>(null)
 
   useEffect(() => {
     setT(null)
+    setLive(false)
+    prevPrice.current = null
     const ws = openTickerStream(symbol, setT)
+    ws.addEventListener('open', () => setLive(true))
+    ws.addEventListener('close', () => setLive(false))
+    ws.addEventListener('error', () => setLive(false))
     return () => closeWs(ws)
   }, [symbol])
 
+  // Son fiyat degisince kisa flash
+  useEffect(() => {
+    if (!t) return
+    const p = t.last
+    if (prevPrice.current != null && p !== prevPrice.current) {
+      setFlash(p > prevPrice.current ? 'flash-up' : 'flash-down')
+      const id = setTimeout(() => setFlash(''), 500)
+      prevPrice.current = p
+      return () => clearTimeout(id)
+    }
+    prevPrice.current = p
+  }, [t])
+
+  const signal = useSignal(symbol)
   const base = symbol.replace(/USDT$/, '')
   const up = (t?.changePercent ?? 0) >= 0
   const changeColor = up ? 'text-bn-up' : 'text-bn-down'
@@ -35,9 +58,29 @@ export function SymbolHeader() {
         {base}/USDT
       </span>
 
-      <span className={`font-mono text-xl font-semibold tabular-nums ${changeColor}`}>
+      <span className={`rounded px-1 font-mono text-xl font-semibold tabular-nums ${flash} ${changeColor}`}>
         {t ? fmtPrice(symbol, t.last) : '—'}
       </span>
+
+      <span className="flex items-center gap-1 text-[10px] text-bn-sub">
+        <span className={`h-1.5 w-1.5 rounded-full ${live ? 'bg-bn-up' : 'bg-bn-down'}`} />
+        {live ? 'canlı' : 'bağlanıyor…'}
+      </span>
+
+      {signal && (
+        <span
+          className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+            signal.label === 'AL'
+              ? 'bg-bn-up/15 text-bn-up'
+              : signal.label === 'SAT'
+                ? 'bg-bn-down/15 text-bn-down'
+                : 'bg-bn-line text-bn-sub'
+          }`}
+          title={`Teknik sinyal — al: ${signal.bullish}, sat: ${signal.bearish} (RSI+MACD+MA)`}
+        >
+          Sinyal: {signal.label}
+        </span>
+      )}
 
       <Field label="24s Değişim">
         <span className={changeColor}>

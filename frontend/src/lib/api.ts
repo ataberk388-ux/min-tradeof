@@ -70,6 +70,11 @@ export async function deleteAlarm(id: number): Promise<void> {
   await api.delete(`/alarms/${id}`)
 }
 
+export async function updateAlarm(id: number, input: CreateAlarmInput): Promise<Alarm> {
+  const { data } = await api.put<Alarm>(`/alarms/${id}`, input)
+  return data
+}
+
 export async function reorderAlarms(orderedIds: number[]): Promise<void> {
   await api.put('/alarms/reorder', orderedIds)
 }

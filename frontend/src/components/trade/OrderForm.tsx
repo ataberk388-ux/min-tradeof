@@ -3,6 +3,7 @@ import { toast } from 'sonner'
 import { closeWs, openTickerStream } from '@/lib/binance'
 import { useActiveSymbol } from '@/hooks/useActiveSymbol'
 import { useOrderTicket } from '@/hooks/useOrderTicket'
+import { pushNotification } from '@/hooks/useNotifications'
 import { useFillOrder, usePaperOrders, usePlaceOrder, usePortfolio } from '@/hooks/usePaper'
 import { formatNum } from '@/lib/format'
 import { fmtPrice, fmtQty } from '@/lib/symbolFormat'
@@ -17,6 +18,8 @@ export function OrderForm() {
   const [type, setType] = useState<OrderType>('MARKET')
   const [price, setPrice] = useState('')
   const [qty, setQty] = useState('')
+  const [totalInput, setTotalInput] = useState('')
+  const [amountMode, setAmountMode] = useState<'qty' | 'total'>('qty')
   const [livePrice, setLivePrice] = useState<number | null>(null)
 
   const { ticket } = useOrderTicket()
@@ -59,21 +62,34 @@ export function OrderForm() {
   const position = portfolio?.positions.find((p) => p.asset === asset)
   const posQty = position?.qty ?? 0
   const effectivePrice = type === 'LIMIT' ? Number(price) || livePrice || 0 : livePrice || 0
-  const total = (Number(qty) || 0) * effectivePrice
+
+  // Miktar (base varlik) ya da Tutar (USDT) ile gir
+  const submitQty =
+    amountMode === 'qty'
+      ? Number(qty) || 0
+      : effectivePrice > 0
+        ? (Number(totalInput) || 0) / effectivePrice
+        : 0
+  const totalDisplay =
+    amountMode === 'qty' ? (Number(qty) || 0) * effectivePrice : Number(totalInput) || 0
 
   const setPercent = (pct: number) => {
-    if (side === 'BUY') {
-      if (effectivePrice > 0) setQty(((usdt * pct) / effectivePrice).toFixed(6))
+    if (amountMode === 'qty') {
+      if (side === 'BUY') {
+        if (effectivePrice > 0) setQty(((usdt * pct) / effectivePrice).toFixed(6))
+      } else {
+        setQty((posQty * pct).toFixed(6))
+      }
     } else {
-      setQty((posQty * pct).toFixed(6))
+      if (side === 'BUY') setTotalInput((usdt * pct).toFixed(2))
+      else setTotalInput((posQty * pct * effectivePrice).toFixed(2))
     }
   }
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault()
-    const q = Number(qty)
-    if (!q || q <= 0) {
-      toast.error('Geçerli miktar gir')
+    if (!submitQty || submitQty <= 0) {
+      toast.error('Geçerli miktar/tutar gir')
       return
     }
     if (type === 'LIMIT' && (!Number(price) || Number(price) <= 0)) {
@@ -81,11 +97,14 @@ export function OrderForm() {
       return
     }
     place.mutate(
-      { symbol, side, type, qty: q, price: type === 'LIMIT' ? Number(price) : undefined },
+      { symbol, side, type, qty: submitQty, price: type === 'LIMIT' ? Number(price) : undefined },
       {
         onSuccess: () => {
-          toast.success(`${asset} ${side === 'BUY' ? 'alış' : 'satış'} emri verildi`)
+          const label = side === 'BUY' ? 'alış' : 'satış'
+          toast.success(`${asset} ${label} emri verildi`)
+          pushNotification(`${type === 'LIMIT' ? 'Limit' : 'Piyasa'} ${label}: ${asset}`)
           setQty('')
+          setTotalInput('')
         },
         onError: (err) => toast.error((err as unknown as ApiError).message ?? 'Emir başarısız'),
       },
@@ -159,16 +178,48 @@ export function OrderForm() {
           )}
         </Field>
 
-        {/* Miktar */}
-        <Field label={`Miktar (${asset})`}>
-          <input
-            value={qty}
-            onChange={(e) => setQty(e.target.value)}
-            inputMode="decimal"
-            placeholder="0.00"
-            className="w-full rounded-md border border-bn-line bg-bn-panel2 px-3 py-2 text-sm text-bn-txt outline-none focus:border-bn-gold/50"
-          />
-        </Field>
+        {/* Miktar / Tutar */}
+        <div className="mb-1 flex items-center justify-between">
+          <span className="text-[11px] text-bn-sub">
+            {amountMode === 'qty' ? `Miktar (${asset})` : 'Tutar (USDT)'}
+          </span>
+          <div className="flex gap-1 text-[10px]">
+            <button
+              type="button"
+              onClick={() => setAmountMode('qty')}
+              className={amountMode === 'qty' ? 'text-bn-gold' : 'text-bn-sub hover:text-bn-txt'}
+            >
+              Miktar
+            </button>
+            <span className="text-bn-line">|</span>
+            <button
+              type="button"
+              onClick={() => setAmountMode('total')}
+              className={amountMode === 'total' ? 'text-bn-gold' : 'text-bn-sub hover:text-bn-txt'}
+            >
+              Tutar
+            </button>
+          </div>
+        </div>
+        <div className="mb-3">
+          {amountMode === 'qty' ? (
+            <input
+              value={qty}
+              onChange={(e) => setQty(e.target.value)}
+              inputMode="decimal"
+              placeholder="0.00"
+              className="w-full rounded-md border border-bn-line bg-bn-panel2 px-3 py-2 text-sm text-bn-txt outline-none focus:border-bn-gold/50"
+            />
+          ) : (
+            <input
+              value={totalInput}
+              onChange={(e) => setTotalInput(e.target.value)}
+              inputMode="decimal"
+              placeholder="0.00"
+              className="w-full rounded-md border border-bn-line bg-bn-panel2 px-3 py-2 text-sm text-bn-txt outline-none focus:border-bn-gold/50"
+            />
+          )}
+        </div>
 
         {/* Yuzde */}
         <div className="mb-3 grid grid-cols-4 gap-1">
@@ -185,8 +236,19 @@ export function OrderForm() {
         </div>
 
         <div className="mb-3 flex justify-between text-xs text-bn-sub">
-          <span>Tutar</span>
-          <span className="font-mono text-bn-txt">{formatNum(total, 2)} USDT</span>
+          {amountMode === 'qty' ? (
+            <>
+              <span>Tutar</span>
+              <span className="font-mono text-bn-txt">{formatNum(totalDisplay, 2)} USDT</span>
+            </>
+          ) : (
+            <>
+              <span>Miktar</span>
+              <span className="font-mono text-bn-txt">
+                {fmtQty(symbol, submitQty)} {asset}
+              </span>
+            </>
+          )}
         </div>
 
         <button

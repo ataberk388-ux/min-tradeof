@@ -9,17 +9,18 @@ export default {
         mono: ['"JetBrains Mono"', 'ui-monospace', 'SFMono-Regular', 'monospace'],
       },
       colors: {
-        // Binance borsa paleti
+        // Binance borsa paleti — temaya gore degisenler CSS degiskeninden (opaklik destekli)
         bn: {
-          bg: '#0B0E11',
-          panel: '#181A20',
-          panel2: '#1E2329',
-          line: '#2B3139',
+          bg: 'rgb(var(--bn-bg) / <alpha-value>)',
+          panel: 'rgb(var(--bn-panel) / <alpha-value>)',
+          panel2: 'rgb(var(--bn-panel2) / <alpha-value>)',
+          line: 'rgb(var(--bn-line) / <alpha-value>)',
+          txt: 'rgb(var(--bn-txt) / <alpha-value>)',
+          sub: 'rgb(var(--bn-sub) / <alpha-value>)',
+          // Sabitler (temadan bagimsiz)
           gold: '#FCD535',
           up: '#0ECB81',
           down: '#F6465D',
-          txt: '#EAECEF',
-          sub: '#848E9C',
         },
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',

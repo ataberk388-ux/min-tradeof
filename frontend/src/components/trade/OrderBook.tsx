@@ -40,14 +40,16 @@ export function OrderBook() {
   const [group, setGroup] = useState<number | null>(null)
   const groupSize = group ?? baseTick
   const [view, setView] = useState<'book' | 'depth'>('book')
+  const [mode, setMode] = useState<'all' | 'bids' | 'asks'>('all')
+  const rowCount = mode === 'all' ? ROWS : ROWS * 2
 
   const asks = useMemo(
-    () => withCumulative(groupLevels(depth.asks, groupSize, true).slice(0, ROWS)),
-    [depth.asks, groupSize],
+    () => withCumulative(groupLevels(depth.asks, groupSize, true).slice(0, rowCount)),
+    [depth.asks, groupSize, rowCount],
   )
   const bids = useMemo(
-    () => withCumulative(groupLevels(depth.bids, groupSize, false).slice(0, ROWS)),
-    [depth.bids, groupSize],
+    () => withCumulative(groupLevels(depth.bids, groupSize, false).slice(0, rowCount)),
+    [depth.bids, groupSize, rowCount],
   )
   const maxTotal = Math.max(asks.at(-1)?.total ?? 0, bids.at(-1)?.total ?? 0, 1)
 
@@ -56,6 +58,11 @@ export function OrderBook() {
   const mid = bestAsk && bestBid ? (bestAsk + bestBid) / 2 : null
   const spread = bestAsk && bestBid ? bestAsk - bestBid : null
   const spreadPct = spread && mid ? (spread / mid) * 100 : null
+
+  // Alis/satis baskisi (tum gorunur derinligin hacim orani)
+  const totalBidVol = useMemo(() => depth.bids.reduce((s, l) => s + l.qty, 0), [depth.bids])
+  const totalAskVol = useMemo(() => depth.asks.reduce((s, l) => s + l.qty, 0), [depth.asks])
+  const bidPct = totalBidVol + totalAskVol > 0 ? (totalBidVol / (totalBidVol + totalAskVol)) * 100 : 50
 
   return (
     <div className="flex h-full flex-col bg-bn-panel">
@@ -93,39 +100,73 @@ export function OrderBook() {
         <DepthChart depth={depth} symbol={symbol} />
       ) : (
         <>
+          {/* Alis/Satis baskisi */}
+          <div className="px-3 pt-1.5">
+            <div className="mb-1 flex justify-between text-[10px] font-medium">
+              <span className="text-bn-up">Alış {bidPct.toFixed(0)}%</span>
+              <span className="text-bn-down">{(100 - bidPct).toFixed(0)}% Satış</span>
+            </div>
+            <div className="flex h-1.5 overflow-hidden rounded-full bg-bn-down/30">
+              <div className="bg-bn-up" style={{ width: `${bidPct}%` }} />
+            </div>
+          </div>
+
+          {/* Gorunum modu */}
+          <div className="flex gap-1 px-3 py-1.5 text-[10px]">
+            <ModeBtn active={mode === 'all'} onClick={() => setMode('all')}>Hepsi</ModeBtn>
+            <ModeBtn active={mode === 'bids'} onClick={() => setMode('bids')}>Alış</ModeBtn>
+            <ModeBtn active={mode === 'asks'} onClick={() => setMode('asks')}>Satış</ModeBtn>
+          </div>
+
           <div className="grid grid-cols-3 px-3 py-1 text-[10px] uppercase tracking-wide text-bn-sub">
             <span>Fiyat</span>
             <span className="text-right">Miktar</span>
             <span className="text-right">Toplam</span>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-hidden">
-        <div className="flex flex-col-reverse">
-          {asks.map((lvl) => (
-            <Row key={`a-${lvl.price}`} lvl={lvl} maxTotal={maxTotal} side="ask" symbol={symbol} onClick={() => fillPrice(lvl.price)} />
-          ))}
-        </div>
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            {mode !== 'bids' && (
+              <div className="flex flex-col-reverse">
+                {asks.map((lvl) => (
+                  <Row key={`a-${lvl.price}`} lvl={lvl} maxTotal={maxTotal} side="ask" symbol={symbol} onClick={() => fillPrice(lvl.price)} />
+                ))}
+              </div>
+            )}
 
-        {/* Orta: mid fiyat + spread */}
-        <div className="flex items-center justify-between border-y border-bn-line px-3 py-1">
-          <span className="font-mono text-sm font-semibold text-bn-txt">
-            {mid != null ? fmtPrice(symbol, mid) : '—'}
-          </span>
-          <span className="text-[10px] text-bn-sub">
-            Spread {spread != null ? fmtPrice(symbol, spread) : '—'}
-            {spreadPct != null ? ` (${spreadPct.toFixed(3)}%)` : ''}
-          </span>
-        </div>
+            <div className="flex items-center justify-between border-y border-bn-line px-3 py-1">
+              <span className="font-mono text-sm font-semibold text-bn-txt">
+                {mid != null ? fmtPrice(symbol, mid) : '—'}
+              </span>
+              <span className="text-[10px] text-bn-sub">
+                Spread {spread != null ? fmtPrice(symbol, spread) : '—'}
+                {spreadPct != null ? ` (${spreadPct.toFixed(3)}%)` : ''}
+              </span>
+            </div>
 
-        <div>
-          {bids.map((lvl) => (
-            <Row key={`b-${lvl.price}`} lvl={lvl} maxTotal={maxTotal} side="bid" symbol={symbol} onClick={() => fillPrice(lvl.price)} />
-          ))}
-        </div>
+            {mode !== 'asks' && (
+              <div>
+                {bids.map((lvl) => (
+                  <Row key={`b-${lvl.price}`} lvl={lvl} maxTotal={maxTotal} side="bid" symbol={symbol} onClick={() => fillPrice(lvl.price)} />
+                ))}
+              </div>
+            )}
           </div>
         </>
       )}
     </div>
+  )
+}
+
+function ModeBtn({ active, onClick, children }: { active: boolean; onClick: () => void; children: string }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`rounded px-2 py-0.5 transition ${
+        active ? 'bg-bn-line text-bn-txt' : 'text-bn-sub hover:text-bn-txt'
+      }`}
+    >
+      {children}
+    </button>
   )
 }
 
