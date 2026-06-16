@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import * as Tabs from '@radix-ui/react-tabs'
 import { toast } from 'sonner'
 import { Ban, History, Inbox, Layers, Wallet, X } from 'lucide-react'
@@ -76,6 +76,40 @@ function Count({ n, muted }: { n: number; muted?: boolean }) {
   )
 }
 
+/** Sembol filtre seridi: tablodaki mevcut sembollerden secim (+ Tümü). */
+function SymbolFilter({
+  value,
+  onChange,
+  symbols,
+}: {
+  value: string
+  onChange: (s: string) => void
+  symbols: string[]
+}) {
+  return (
+    <div className="flex items-center gap-2 border-b border-bn-line/60 px-3 py-1.5">
+      <span className="text-[11px] text-bn-sub">Sembol</span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="rounded border border-bn-line bg-bn-panel2 px-2 py-0.5 text-[11px] text-bn-txt outline-none focus:border-bn-gold/50"
+      >
+        <option value="">Tümü ({symbols.length})</option>
+        {symbols.map((s) => (
+          <option key={s} value={s}>
+            {s}
+          </option>
+        ))}
+      </select>
+      {value && (
+        <button onClick={() => onChange('')} className="text-[11px] text-bn-sub transition hover:text-bn-gold">
+          Temizle
+        </button>
+      )}
+    </div>
+  )
+}
+
 function Trigger({ value, children }: { value: string; children: ReactNode }) {
   return (
     <Tabs.Trigger
@@ -89,6 +123,8 @@ function Trigger({ value, children }: { value: string; children: ReactNode }) {
 
 function OrdersTable({ orders, cancellable }: { orders: PaperOrder[]; cancellable?: boolean }) {
   const cancel = useCancelOrder()
+  const [sym, setSym] = useState('')
+  const symbols = useMemo(() => [...new Set(orders.map((o) => o.symbol))].sort(), [orders])
 
   if (orders.length === 0) {
     return cancellable ? (
@@ -117,9 +153,11 @@ function OrdersTable({ orders, cancellable }: { orders: PaperOrder[]; cancellabl
     toast.success('Tüm açık emirler iptal ediliyor')
   }
 
+  const shown = sym ? orders.filter((o) => o.symbol === sym) : orders
+
   return (
     <div className="flex h-full flex-col">
-      {cancellable && (
+      {cancellable ? (
         <div className="flex items-center justify-between border-b border-bn-line/60 px-3 py-1.5">
           <span className="text-[11px] text-bn-sub">{orders.length} açık emir</span>
           <button
@@ -131,6 +169,8 @@ function OrdersTable({ orders, cancellable }: { orders: PaperOrder[]; cancellabl
             Tümünü iptal et
           </button>
         </div>
+      ) : (
+        symbols.length > 1 && <SymbolFilter value={sym} onChange={setSym} symbols={symbols} />
       )}
       <div className="overflow-x-auto">
         <table className="w-full min-w-[540px] text-xs">
@@ -148,7 +188,14 @@ function OrdersTable({ orders, cancellable }: { orders: PaperOrder[]; cancellabl
             </tr>
           </thead>
           <tbody>
-            {orders.map((o) => {
+            {shown.length === 0 && (
+              <tr>
+                <td colSpan={cancellable ? 9 : 8} className="px-3 py-6 text-center text-xs text-bn-sub">
+                  {sym} için kayıt yok
+                </td>
+              </tr>
+            )}
+            {shown.map((o) => {
               const px = o.fillPrice ?? o.price
               const total = px != null ? px * o.qty : null
               return (
@@ -262,6 +309,9 @@ function ConditionalTable() {
 
 function PositionsTable() {
   const { enriched } = usePortfolioValue()
+  const [sym, setSym] = useState('')
+  const symbols = useMemo(() => [...new Set(enriched.map((p) => p.asset))].sort(), [enriched])
+
   if (enriched.length === 0) {
     return (
       <EmptyState
@@ -271,12 +321,15 @@ function PositionsTable() {
       />
     )
   }
-  const totalValue = enriched.reduce((s, p) => s + (p.value ?? p.avgPrice * p.qty), 0)
-  const totalPnl = enriched.reduce((s, p) => s + (p.pnl ?? 0), 0)
+  const shown = sym ? enriched.filter((p) => p.asset === sym) : enriched
+  const totalValue = shown.reduce((s, p) => s + (p.value ?? p.avgPrice * p.qty), 0)
+  const totalPnl = shown.reduce((s, p) => s + (p.pnl ?? 0), 0)
   const totalUp = totalPnl >= 0
 
   return (
-    <div className="overflow-x-auto">
+    <div>
+      {symbols.length > 1 && <SymbolFilter value={sym} onChange={setSym} symbols={symbols} />}
+      <div className="overflow-x-auto">
       <table className="w-full min-w-[460px] text-xs">
         <thead>
           <tr className="text-left text-[10px] uppercase tracking-wide text-bn-sub">
@@ -289,7 +342,7 @@ function PositionsTable() {
           </tr>
         </thead>
         <tbody>
-          {enriched.map((p) => {
+          {shown.map((p) => {
             const up = (p.pnl ?? 0) >= 0
             return (
               <tr key={p.asset} className="border-t border-bn-line/60 transition hover:bg-bn-line/30">
@@ -324,6 +377,7 @@ function PositionsTable() {
           </tr>
         </tfoot>
       </table>
+      </div>
     </div>
   )
 }
