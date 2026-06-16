@@ -2,11 +2,13 @@ import { useState } from 'react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { ChevronDown, LogOut, Settings } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
+import { ACCENTS, useAccent } from '@/hooks/useAccent'
 import { ConfirmLogoutDialog } from '@/components/layout/ConfirmLogoutDialog'
 
 /** Avatar + acilir menu (Ayarlar / Cikis). Cikis onay modali tetikler. */
 export function UserMenu({ onSettings }: { onSettings: () => void }) {
   const { username } = useAuth()
+  const { accent, setAccent } = useAccent()
   const [confirmOpen, setConfirmOpen] = useState(false)
   const initial = (username ?? '?').charAt(0).toUpperCase()
 
@@ -31,6 +33,23 @@ export function UserMenu({ onSettings }: { onSettings: () => void }) {
             <DropdownMenu.Label className="px-2 py-1.5 text-xs text-bn-sub">
               {username}
             </DropdownMenu.Label>
+            <DropdownMenu.Separator className="my-1 h-px bg-bn-line" />
+            <div className="px-2 py-1.5">
+              <p className="mb-1.5 text-[11px] text-bn-sub">Accent rengi</p>
+              <div className="flex gap-1.5">
+                {ACCENTS.map((a) => (
+                  <button
+                    key={a.rgb}
+                    onClick={() => setAccent(a.rgb)}
+                    title={a.name}
+                    style={{ backgroundColor: `rgb(${a.rgb})` }}
+                    className={`h-5 w-5 rounded-full transition ${
+                      accent === a.rgb ? 'ring-2 ring-bn-txt ring-offset-1 ring-offset-bn-panel' : ''
+                    }`}
+                  />
+                ))}
+              </div>
+            </div>
             <DropdownMenu.Separator className="my-1 h-px bg-bn-line" />
             <DropdownMenu.Item
               onSelect={onSettings}

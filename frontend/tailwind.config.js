@@ -17,8 +17,9 @@ export default {
           line: 'rgb(var(--bn-line) / <alpha-value>)',
           txt: 'rgb(var(--bn-txt) / <alpha-value>)',
           sub: 'rgb(var(--bn-sub) / <alpha-value>)',
-          // Sabitler (temadan bagimsiz)
-          gold: '#FCD535',
+          // Accent (secici ile degisir)
+          gold: 'rgb(var(--bn-gold) / <alpha-value>)',
+          // Sabitler
           up: '#0ECB81',
           down: '#F6465D',
         },

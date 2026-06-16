@@ -8,6 +8,7 @@ import { OrderForm } from '@/components/trade/OrderForm'
 import { RecentTrades } from '@/components/trade/RecentTrades'
 import { SymbolHeader } from '@/components/trade/SymbolHeader'
 import { TerminalTopbar } from '@/components/trade/TerminalTopbar'
+import { WatchlistBar } from '@/components/trade/WatchlistBar'
 
 /** Dikey panel kenari (yatay PanelGroup icinde) — surukle ile genislik ayari. */
 function VHandle() {
@@ -28,6 +29,7 @@ export function DesktopTerminal() {
   return (
       <div className="flex h-screen flex-col overflow-hidden bg-bn-bg text-bn-txt">
         <TerminalTopbar />
+        <WatchlistBar />
         <SymbolHeader />
 
         <div className="min-h-0 flex-1">

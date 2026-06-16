@@ -24,12 +24,20 @@ const BARS = [38, 62, 48, 80, 56, 72, 44, 90, 60, 76, 50, 84, 46, 68]
  * canli mum grafigi + ozellikler), sagda temiz login/kayit formu. Mobilde sol panel
  * gizlenir, form tam ekran olur. Token yokken tum uygulamanin onune gecer.
  */
-export function AuthForm() {
+export function AuthForm({ onBack }: { onBack?: () => void } = {}) {
   const [mode, setMode] = useState<Mode>('login')
   const isLogin = mode === 'login'
 
   return (
     <div className="fixed inset-0 flex">
+      {onBack && (
+        <button
+          onClick={onBack}
+          className="absolute left-4 top-4 z-20 rounded-md px-2 py-1 text-sm text-white/80 transition hover:text-white"
+        >
+          ← Geri
+        </button>
+      )}
       {/* ── SOL: animasyonlu kripto hero (lg+) ───────────────────────── */}
       <aside className="auth-bg relative hidden w-[55%] overflow-hidden lg:flex lg:flex-col lg:justify-between lg:p-12">
         <div className="auth-grid pointer-events-none absolute inset-0" />

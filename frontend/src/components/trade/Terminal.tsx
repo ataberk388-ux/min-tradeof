@@ -1,5 +1,6 @@
 import { DesktopTerminal } from '@/components/trade/TradingTerminal'
 import { MobileTerminal } from '@/components/trade/MobileTerminal'
+import { CommandPalette } from '@/components/trade/CommandPalette'
 import { ActiveSymbolProvider } from '@/hooks/useActiveSymbol'
 import { OrderTicketProvider } from '@/hooks/useOrderTicket'
 import { useAlarmStream } from '@/hooks/useAlarmStream'
@@ -19,6 +20,7 @@ export function Terminal() {
     <ActiveSymbolProvider>
       <OrderTicketProvider>
         {isMobile ? <MobileTerminal /> : <DesktopTerminal />}
+        <CommandPalette />
       </OrderTicketProvider>
     </ActiveSymbolProvider>
   )

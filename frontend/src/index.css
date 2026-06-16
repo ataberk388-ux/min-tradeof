@@ -23,6 +23,9 @@
     --ring: 222.2 84% 4.9%;
     --radius: 0.5rem;
 
+    /* Accent (temadan bagimsiz; secici degistirir) */
+    --bn-gold: 252 213 53;
+
     /* Binance acik tema (RGB kanal; opaklik destegi icin) */
     --bn-bg: 250 250 250;
     --bn-panel: 255 255 255;

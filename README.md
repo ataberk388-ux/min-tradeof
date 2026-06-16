@@ -30,6 +30,12 @@ A full-stack trading terminal that streams **live market data directly from Bina
 - **🔐 Multi-user auth** — stateless **JWT** (Spring Security OAuth2 Resource Server), BCrypt passwords, per-user data isolation.
 - **⚡ Lean by design** — direct Binance public API/WS for market data keeps the backend focused on what's truly ours: auth, alarms, and the paper portfolio.
 
+## 📸 Screenshots
+
+| Desktop terminal | Mobile |
+| :--------------: | :----: |
+| ![Terminal](docs/terminal.png) | ![Mobile](docs/mobile.png) |
+
 ## 🧱 Tech Stack
 
 **Backend**
