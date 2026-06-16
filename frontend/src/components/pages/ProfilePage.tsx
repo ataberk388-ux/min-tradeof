@@ -1,10 +1,11 @@
 import { useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
-import { Copy, KeyRound, Moon, RefreshCw, Sun, User } from 'lucide-react'
+import { Bell, Copy, KeyRound, Moon, RefreshCw, Sun, User } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useTheme } from '@/hooks/useTheme'
 import { ACCENTS, useAccent } from '@/hooks/useAccent'
 import { changePassword, type ApiError } from '@/lib/api'
+import { isPushSupported, pushEnabled, requestPush, setPushPref } from '@/lib/webpush'
 
 const APIKEY_STORE = 'cryptoalarm.apikey'
 
@@ -26,6 +27,19 @@ export function ProfilePage() {
   const [saving, setSaving] = useState(false)
 
   const [apiKey, setApiKey] = useState<string>(() => localStorage.getItem(APIKEY_STORE) ?? '')
+
+  const [pushOn, setPushOn] = useState(() => pushEnabled())
+  const togglePush = async () => {
+    if (pushOn) {
+      setPushPref(false)
+      setPushOn(false)
+      toast.success('Tarayıcı bildirimleri kapatıldı')
+      return
+    }
+    const ok = await requestPush()
+    setPushOn(ok)
+    toast[ok ? 'success' : 'error'](ok ? 'Tarayıcı bildirimleri açık' : 'İzin verilmedi')
+  }
 
   const submitPassword = async () => {
     if (next.length < 6) {
@@ -116,6 +130,24 @@ export function ProfilePage() {
             {theme === 'dark' ? 'Koyu' : 'Açık'}
           </button>
         </div>
+        {isPushSupported() && (
+          <div className="mt-3 flex items-center justify-between">
+            <span className="text-sm text-bn-txt">
+              Tarayıcı bildirimleri
+              <span className="ml-1 block text-[11px] text-bn-sub sm:inline">— alarm tetiklenince OS bildirimi</span>
+            </span>
+            <button
+              onClick={togglePush}
+              className={`flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm transition ${
+                pushOn ? 'border-bn-up/40 text-bn-up' : 'border-bn-line text-bn-sub hover:text-bn-txt'
+              }`}
+            >
+              <Bell className="h-4 w-4" />
+              {pushOn ? 'Açık' : 'Kapalı'}
+            </button>
+          </div>
+        )}
+
         <div className="mt-3 flex items-center justify-between">
           <span className="text-sm text-bn-txt">Vurgu rengi</span>
           <div className="flex gap-2">
