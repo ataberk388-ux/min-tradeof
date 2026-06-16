@@ -3,6 +3,7 @@ package com.ataberk.cryptoalarm.notification;
 import com.ataberk.cryptoalarm.domain.Alarm;
 import com.ataberk.cryptoalarm.dto.AlarmTriggeredEvent;
 import com.ataberk.cryptoalarm.repository.AlarmRepository;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
@@ -24,6 +25,7 @@ public class NotificationService implements AlarmTriggerHandler {
 
     private final AlarmRepository alarmRepository;
     private final AlarmEventPublisher eventPublisher;
+    private final MeterRegistry meterRegistry;
 
     @Override
     @Async("notificationExecutor")
@@ -33,6 +35,7 @@ public class NotificationService implements AlarmTriggerHandler {
         alarmRepository.deactivate(alarm.getId(), Instant.now());
         // Canli akis: yalnizca alarmin sahibine aninda it.
         eventPublisher.publishTriggered(alarm.getUserId(), AlarmTriggeredEvent.of(alarm, triggerPrice));
+        meterRegistry.counter("alarm.triggered").increment();
     }
 
     /**

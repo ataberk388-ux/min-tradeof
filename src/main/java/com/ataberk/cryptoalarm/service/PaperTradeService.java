@@ -11,6 +11,7 @@ import com.ataberk.cryptoalarm.ingestion.BinancePriceClient;
 import com.ataberk.cryptoalarm.repository.PaperAccountRepository;
 import com.ataberk.cryptoalarm.repository.PaperOrderRepository;
 import com.ataberk.cryptoalarm.repository.PaperPositionRepository;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,6 +36,7 @@ public class PaperTradeService {
     private final PaperPositionRepository positionRepo;
     private final PaperOrderRepository orderRepo;
     private final BinancePriceClient priceClient;
+    private final MeterRegistry meterRegistry;
 
     @Transactional
     public PaperAccount account(Long userId) {
@@ -81,6 +83,8 @@ public class PaperTradeService {
             order.setStatus(OrderStatus.OPEN);
             order.setPrice(request.price());
         }
+        meterRegistry.counter("paper.order.placed", "type", request.type().name(), "side", request.side().name())
+                .increment();
         return orderRepo.save(order);
     }
 
