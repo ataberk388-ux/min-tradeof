@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { TrendingDown, TrendingUp } from 'lucide-react'
 import { toast } from 'sonner'
 import { closeWs, openTickerStream } from '@/lib/binance'
 import { useActiveSymbol } from '@/hooks/useActiveSymbol'
@@ -170,18 +171,20 @@ export function OrderForm() {
       <div className="mb-3 grid grid-cols-2 overflow-hidden rounded-md border border-bn-line">
         <button
           onClick={() => setSide('BUY')}
-          className={`py-1.5 text-sm font-semibold transition ${
-            isBuy ? 'bg-bn-up text-bn-bg' : 'bg-bn-panel2 text-bn-sub'
+          className={`flex items-center justify-center gap-1.5 py-1.5 text-sm font-semibold transition ${
+            isBuy ? 'bg-bn-up text-bn-bg' : 'bg-bn-panel2 text-bn-sub hover:text-bn-up'
           }`}
         >
+          <TrendingUp className="h-4 w-4" />
           Al
         </button>
         <button
           onClick={() => setSide('SELL')}
-          className={`py-1.5 text-sm font-semibold transition ${
-            !isBuy ? 'bg-bn-down text-white' : 'bg-bn-panel2 text-bn-sub'
+          className={`flex items-center justify-center gap-1.5 py-1.5 text-sm font-semibold transition ${
+            !isBuy ? 'bg-bn-down text-white' : 'bg-bn-panel2 text-bn-sub hover:text-bn-down'
           }`}
         >
+          <TrendingDown className="h-4 w-4" />
           Sat
         </button>
       </div>
@@ -320,10 +323,11 @@ export function OrderForm() {
         <button
           type="submit"
           disabled={place.isPending}
-          className={`mt-auto rounded-md py-2.5 text-sm font-semibold transition disabled:opacity-60 ${
+          className={`mt-auto flex items-center justify-center gap-1.5 rounded-md py-2.5 text-sm font-semibold transition disabled:opacity-60 ${
             isBuy ? 'bg-bn-up text-bn-bg hover:opacity-90' : 'bg-bn-down text-white hover:opacity-90'
           }`}
         >
+          {isBuy ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
           {isConditional
             ? `${mode === 'OCO' ? 'OCO' : 'Stop-Limit'} kur (${isBuy ? 'Al' : 'Sat'})`
             : isBuy

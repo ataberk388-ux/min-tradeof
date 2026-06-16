@@ -60,10 +60,10 @@ export function OrderBook() {
     }
   }, [symbol])
 
-  // Canli son islem fiyati (orta cizgi) + yon/flash
+  // Canli son islem fiyati (orta cizgi) + yon (renk/ok). Arka plan flash YOK — surekli
+  // islemde goz yormamasi icin yalniz renk ve ok yonu degisir.
   const [last, setLast] = useState<number | null>(null)
   const [lastDir, setLastDir] = useState<'' | 'up' | 'down'>('')
-  const [lastFlash, setLastFlash] = useState('')
   const prevLast = useRef<number | null>(null)
   useEffect(() => {
     setLast(null)
@@ -72,10 +72,7 @@ export function OrderBook() {
     const ws = openTradeStream(symbol, (t) => {
       setLast(t.price)
       if (prevLast.current != null && t.price !== prevLast.current) {
-        const dir = t.price > prevLast.current ? 'up' : 'down'
-        setLastDir(dir)
-        setLastFlash(dir === 'up' ? 'flash-up' : 'flash-down')
-        setTimeout(() => setLastFlash(''), 400)
+        setLastDir(t.price > prevLast.current ? 'up' : 'down')
       }
       prevLast.current = t.price
     })
@@ -228,7 +225,7 @@ export function OrderBook() {
 
             {/* Canli son fiyat + spread */}
             <div className="flex items-center justify-between border-y border-bn-line px-3 py-1.5">
-              <span className={`flex items-center gap-1 rounded px-1 font-mono text-base font-semibold tabular-nums ${lastFlash} ${lastDir === 'up' ? 'text-bn-up' : lastDir === 'down' ? 'text-bn-down' : 'text-bn-txt'}`}>
+              <span className={`flex items-center gap-1 font-mono text-base font-semibold tabular-nums ${lastDir === 'up' ? 'text-bn-up' : lastDir === 'down' ? 'text-bn-down' : 'text-bn-txt'}`}>
                 {headPrice != null ? fmtPrice(symbol, headPrice) : '—'}
                 {lastDir === 'up' ? <ArrowUp className="h-3.5 w-3.5" /> : lastDir === 'down' ? <ArrowDown className="h-3.5 w-3.5" /> : null}
               </span>
@@ -340,21 +337,26 @@ function Row({
 }) {
   const pct = (lvl.total / maxTotal) * 100
 
-  // Miktar belirgin degisince satir flash (Web Animations API — temiz yeniden tetikleme)
+  // Satir flash YALNIZ belirgin (>=%50) miktar degisiminde; cok hafif ve kisa (goz yormasin).
+  // Akis 10Hz oldugu icin dusuk esik tum defteri titretirdi.
   const rowRef = useRef<HTMLDivElement>(null)
   const prevQty = useRef(lvl.qty)
+  const lastFlashAt = useRef(0)
   useEffect(() => {
     const prev = prevQty.current
     if (prev !== lvl.qty) {
-      const delta = prev > 0 ? Math.abs(lvl.qty - prev) / prev : 1
-      if (delta > 0.02) {
+      const delta = prev > 0 ? Math.abs(lvl.qty - prev) / prev : 0
+      const now = Date.now()
+      // Satir basina en fazla ~1.5 sn'de bir flash (throttle) + en az %50 degisim
+      if (delta >= 0.5 && now - lastFlashAt.current > 1500) {
+        lastFlashAt.current = now
         const up = lvl.qty > prev
         rowRef.current?.animate(
           [
-            { backgroundColor: up ? 'rgba(14,203,129,0.22)' : 'rgba(246,70,93,0.22)' },
+            { backgroundColor: up ? 'rgba(14,203,129,0.10)' : 'rgba(246,70,93,0.10)' },
             { backgroundColor: 'transparent' },
           ],
-          { duration: 400, easing: 'ease-out' },
+          { duration: 300, easing: 'ease-out' },
         )
       }
       prevQty.current = lvl.qty
