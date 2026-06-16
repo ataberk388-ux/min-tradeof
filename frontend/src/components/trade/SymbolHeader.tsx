@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { Info } from 'lucide-react'
 import { closeWs, openTickerStream, type SymbolTicker } from '@/lib/binance'
 import { useActiveSymbol } from '@/hooks/useActiveSymbol'
 import { useSignal } from '@/hooks/useSignal'
 import { formatCompact } from '@/lib/format'
 import { fmtPrice } from '@/lib/symbolFormat'
 import { CoinIcon } from '@/components/trade/CoinIcon'
+import { CoinInfoPanel } from '@/components/trade/CoinInfoPanel'
 
 /** Secili cift basligi: canli son fiyat + Binance spot tarzi 24s istatistik seridi. */
 export function SymbolHeader() {
@@ -39,6 +41,7 @@ export function SymbolHeader() {
   }, [t])
 
   const signal = useSignal(symbol)
+  const [infoOpen, setInfoOpen] = useState(false)
   const base = symbol.replace(/USDT$/, '')
   const up = (t?.changePercent ?? 0) >= 0
   const changeColor = up ? 'text-bn-up' : 'text-bn-down'
@@ -56,7 +59,17 @@ export function SymbolHeader() {
       <span className="flex items-center gap-2 text-base font-semibold text-bn-txt">
         <CoinIcon asset={base} size={22} />
         {base}/USDT
+        <button
+          onClick={() => setInfoOpen(true)}
+          className="text-bn-sub transition hover:text-bn-gold"
+          aria-label="Coin bilgisi"
+          title="Coin bilgisi"
+        >
+          <Info className="h-4 w-4" />
+        </button>
       </span>
+
+      {infoOpen && <CoinInfoPanel asset={base} onClose={() => setInfoOpen(false)} />}
 
       <span className={`rounded px-1 font-mono text-xl font-semibold tabular-nums ${flash} ${changeColor}`}>
         {t ? fmtPrice(symbol, t.last) : '—'}

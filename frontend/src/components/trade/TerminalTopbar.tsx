@@ -1,8 +1,10 @@
-import { Bell, Moon, Sun } from 'lucide-react'
+import { useState } from 'react'
+import { Bell, Moon, Repeat, Sun } from 'lucide-react'
 import { UserMenu } from '@/components/layout/UserMenu'
 import { NotificationBell } from '@/components/trade/NotificationBell'
 import { HeatmapButton } from '@/components/trade/HeatmapButton'
 import { SymbolSearch } from '@/components/trade/SymbolSearch'
+import { ConvertModal } from '@/components/trade/ConvertModal'
 import { useTheme } from '@/hooks/useTheme'
 import { useRoute, type Route } from '@/hooks/useRoute'
 
@@ -16,6 +18,7 @@ const NAV: { key: Route; label: string }[] = [
 export function TerminalTopbar() {
   const { theme, toggle } = useTheme()
   const { route, navigate } = useRoute()
+  const [convertOpen, setConvertOpen] = useState(false)
 
   return (
     <header className="flex h-12 shrink-0 items-center justify-between border-b border-bn-line bg-bn-panel px-4">
@@ -53,6 +56,15 @@ export function TerminalTopbar() {
         )}
       </div>
       <div className="flex items-center gap-1">
+        <button
+          onClick={() => setConvertOpen(true)}
+          className="hidden items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm text-bn-sub transition hover:bg-bn-line hover:text-bn-txt sm:flex"
+          title="Hızlı çevir"
+        >
+          <Repeat className="h-4 w-4" />
+          Çevir
+        </button>
+        {convertOpen && <ConvertModal onClose={() => setConvertOpen(false)} />}
         <HeatmapButton />
         <NotificationBell />
         <button
