@@ -9,11 +9,15 @@ import { RecentTrades } from '@/components/trade/RecentTrades'
 import { SymbolHeader } from '@/components/trade/SymbolHeader'
 import { TerminalTopbar } from '@/components/trade/TerminalTopbar'
 import { WatchlistBar } from '@/components/trade/WatchlistBar'
-import { MarketsPage } from '@/components/pages/MarketsPage'
-import { PortfolioPage } from '@/components/pages/PortfolioPage'
-import { AlarmsPage } from '@/components/pages/AlarmsPage'
-import { ProfilePage } from '@/components/pages/ProfilePage'
+import { lazy, Suspense } from 'react'
 import { useRoute } from '@/hooks/useRoute'
+
+// Rota sayfalari tembel yuklenir: agir bagimliliklar (recharts vb.) yalniz o sekme
+// acilinca iner -> ilk acilis bundle'i kucuk kalir.
+const MarketsPage = lazy(() => import('@/components/pages/MarketsPage').then((m) => ({ default: m.MarketsPage })))
+const PortfolioPage = lazy(() => import('@/components/pages/PortfolioPage').then((m) => ({ default: m.PortfolioPage })))
+const AlarmsPage = lazy(() => import('@/components/pages/AlarmsPage').then((m) => ({ default: m.AlarmsPage })))
+const ProfilePage = lazy(() => import('@/components/pages/ProfilePage').then((m) => ({ default: m.ProfilePage })))
 
 /** Dikey panel kenari (yatay PanelGroup icinde) — surukle ile genislik ayari. */
 function VHandle() {
@@ -39,10 +43,12 @@ export function DesktopTerminal() {
         <TradeBody />
       ) : (
         <div className="min-h-0 flex-1 overflow-hidden">
-          {route === 'markets' && <MarketsPage />}
-          {route === 'portfolio' && <PortfolioPage />}
-          {route === 'alarms' && <AlarmsPage />}
-          {route === 'profile' && <ProfilePage />}
+          <Suspense fallback={<div className="flex h-full items-center justify-center text-sm text-bn-sub">Yükleniyor…</div>}>
+            {route === 'markets' && <MarketsPage />}
+            {route === 'portfolio' && <PortfolioPage />}
+            {route === 'alarms' && <AlarmsPage />}
+            {route === 'profile' && <ProfilePage />}
+          </Suspense>
         </div>
       )}
     </div>

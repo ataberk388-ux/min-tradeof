@@ -35,4 +35,22 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        // Agir kutuphaneleri ayri chunk'lara bol -> daha iyi cache + lazy sayfalarla
+        // birlikte ilk acilis yukunu dusurur.
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined
+          if (id.includes('recharts') || id.includes('d3-')) return 'vendor-recharts'
+          if (id.includes('lightweight-charts')) return 'vendor-chart'
+          if (id.includes('@tanstack') || id.includes('axios')) return 'vendor-query'
+          if (id.includes('react-dom') || id.includes('/react/') || id.includes('scheduler')) {
+            return 'vendor-react'
+          }
+          return undefined
+        },
+      },
+    },
+  },
 })
