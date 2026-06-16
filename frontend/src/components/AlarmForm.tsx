@@ -3,6 +3,8 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { toast } from 'sonner'
 import { createAlarmSchema, type CreateAlarmInput } from '@/lib/schema'
 import { useCreateAlarm } from '@/hooks/useAlarms'
+import { useActiveSymbol } from '@/hooks/useActiveSymbol'
+import { SymbolCombobox } from '@/components/trade/SymbolCombobox'
 import type { ApiError } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -17,6 +19,7 @@ import {
 
 export function AlarmForm() {
   const createMutation = useCreateAlarm()
+  const { symbol: activeSymbol } = useActiveSymbol()
   const {
     register,
     handleSubmit,
@@ -26,7 +29,7 @@ export function AlarmForm() {
     formState: { errors },
   } = useForm<CreateAlarmInput>({
     resolver: zodResolver(createAlarmSchema),
-    defaultValues: { symbol: '', targetPrice: '', direction: 'ABOVE', type: 'PRICE' },
+    defaultValues: { symbol: activeSymbol, targetPrice: '', direction: 'ABOVE', type: 'PRICE' },
   })
 
   const type = watch('type')
@@ -45,8 +48,14 @@ export function AlarmForm() {
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
       <div className="space-y-2">
-        <Label htmlFor="symbol">Sembol</Label>
-        <Input id="symbol" placeholder="BTCUSDT" {...register('symbol')} />
+        <Label>Sembol</Label>
+        <Controller
+          control={control}
+          name="symbol"
+          render={({ field }) => (
+            <SymbolCombobox value={field.value} onChange={field.onChange} />
+          )}
+        />
         {errors.symbol && <p className="text-sm text-destructive">{errors.symbol.message}</p>}
       </div>
 
