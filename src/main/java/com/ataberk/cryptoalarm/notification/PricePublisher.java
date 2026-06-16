@@ -33,7 +33,11 @@ public class PricePublisher {
         SseEmitter emitter = new SseEmitter(TIMEOUT_MS);
         emitters.add(emitter);
         emitter.onCompletion(() -> emitters.remove(emitter));
-        emitter.onTimeout(() -> emitters.remove(emitter));
+        // Timeout'ta nazikce tamamla -> AsyncRequestTimeoutException WARN'i olusmaz.
+        emitter.onTimeout(() -> {
+            emitter.complete();
+            emitters.remove(emitter);
+        });
         emitter.onError(e -> emitters.remove(emitter));
 
         Map<String, PriceQuote> snapshot = priceCache.snapshot();

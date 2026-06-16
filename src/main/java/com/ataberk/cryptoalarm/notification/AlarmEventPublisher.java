@@ -36,7 +36,12 @@ public class AlarmEventPublisher {
         SseEmitter emitter = new SseEmitter(TIMEOUT_MS);
         emittersByUser.computeIfAbsent(userId, k -> new CopyOnWriteArrayList<>()).add(emitter);
         emitter.onCompletion(() -> removeEmitter(userId, emitter));
-        emitter.onTimeout(() -> removeEmitter(userId, emitter));
+        // Timeout'ta emitter'i nazikce tamamla: aksi halde Spring AsyncRequestTimeoutException
+        // firlatip WARN basar. complete() ile baglanti sessizce kapanir, istemci reconnect eder.
+        emitter.onTimeout(() -> {
+            emitter.complete();
+            removeEmitter(userId, emitter);
+        });
         emitter.onError(e -> removeEmitter(userId, emitter));
         return emitter;
     }
