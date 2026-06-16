@@ -91,6 +91,8 @@ flowchart LR
 - **Server-authoritative fills:** a `@Scheduled` `PaperOrderMatcher` scans open Limit orders against live prices and fills them server-side — independent of whether the browser tab is open.
 - **Dynamic ingestion:** the WebSocket client seeds from config but auto-`SUBSCRIBE`s to any new symbol an alarm is created for, so coverage isn't limited to a fixed list.
 
+> 📖 **Full data-flow walkthrough** — every flow explained class-by-class (auth, market data, alarm hot path, order matcher, conditional orders, PnL, metrics, Flyway): **[`docs/DATA-FLOW.md`](docs/DATA-FLOW.md)**
+
 ## ⚙️ Getting Started
 
 **Prerequisites:** JDK 21 · Node 18+ · Docker (for PostgreSQL)
