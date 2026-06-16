@@ -11,12 +11,15 @@ import com.ataberk.cryptoalarm.ingestion.BinancePriceClient;
 import com.ataberk.cryptoalarm.repository.PaperAccountRepository;
 import com.ataberk.cryptoalarm.repository.PaperOrderRepository;
 import com.ataberk.cryptoalarm.repository.PaperPositionRepository;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
@@ -45,6 +48,9 @@ class PaperTradeServiceTest {
     private PaperOrderRepository orderRepo;
     @Mock
     private BinancePriceClient priceClient;
+    /** Gercek (in-memory) registry: sayac artirimi NPE atmasin diye mock yerine spy. */
+    @Spy
+    private MeterRegistry meterRegistry = new SimpleMeterRegistry();
 
     @InjectMocks
     private PaperTradeService service;

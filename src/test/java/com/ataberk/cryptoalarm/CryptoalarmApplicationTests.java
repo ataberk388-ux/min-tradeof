@@ -1,13 +1,14 @@
 package com.ataberk.cryptoalarm;
 
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
 
-@SpringBootTest
-class CryptoalarmApplicationTests {
+/**
+ * Tum Spring context'inin (gercek PostgreSQL + Flyway gocleri + Hibernate validate dahil)
+ * sorunsuz ayaga kalktigini dogrular. Testcontainers sayesinde harici DB gerekmez.
+ */
+class CryptoalarmApplicationTests extends AbstractIntegrationTest {
 
-	@Test
-	void contextLoads() {
-	}
-
+    @Test
+    void contextLoads() {
+    }
 }

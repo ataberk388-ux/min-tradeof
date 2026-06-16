@@ -7,8 +7,12 @@ spring:
     password: cryptoalarm
   jpa:
     hibernate:
-      ddl-auto: update
+      # Sema artik Flyway tarafindan yonetilir; Hibernate yalniz dogrular (drift yakalar).
+      ddl-auto: validate
     open-in-view: false
+  flyway:
+    # Mevcut (ddl-auto ile olusmus) DB'ler V1'i atlayip baseline'lanir; bos DB'de V1 calisir.
+    baseline-on-migrate: true
 
 # JWT ayarlari. secret HS256 icin >= 256 bit (>= 32 karakter) olmali.
 # Uretimde ENV degiskeninden gelmeli; burada dev varsayilani.
