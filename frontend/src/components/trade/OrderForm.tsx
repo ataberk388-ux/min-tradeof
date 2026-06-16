@@ -5,18 +5,30 @@ import { useActiveSymbol } from '@/hooks/useActiveSymbol'
 import { useOrderTicket } from '@/hooks/useOrderTicket'
 import { pushNotification } from '@/hooks/useNotifications'
 import { useFillOrder, usePaperOrders, usePlaceOrder, usePortfolio } from '@/hooks/usePaper'
+import { addConditional } from '@/hooks/useConditionalOrders'
 import { formatNum } from '@/lib/format'
 import { fmtPrice, fmtQty } from '@/lib/symbolFormat'
 import type { ApiError } from '@/lib/api'
-import type { OrderSide, OrderType } from '@/lib/paper'
+import type { OrderSide } from '@/lib/paper'
+
+/** Emir formu modlari: paper backend (Piyasa/Limit) + client-side koşullu (Stop-Limit/OCO). */
+type FormMode = 'MARKET' | 'LIMIT' | 'STOP_LIMIT' | 'OCO'
+const MODES: { key: FormMode; label: string }[] = [
+  { key: 'MARKET', label: 'Piyasa' },
+  { key: 'LIMIT', label: 'Limit' },
+  { key: 'STOP_LIMIT', label: 'Stop-Limit' },
+  { key: 'OCO', label: 'OCO' },
+]
 
 export function OrderForm() {
   const { debouncedSymbol: symbol } = useActiveSymbol()
   const asset = symbol.replace(/USDT$/, '')
 
   const [side, setSide] = useState<OrderSide>('BUY')
-  const [type, setType] = useState<OrderType>('MARKET')
+  const [mode, setMode] = useState<FormMode>('MARKET')
   const [price, setPrice] = useState('')
+  const [stopPrice, setStopPrice] = useState('')
+  const [tpPrice, setTpPrice] = useState('')
   const [qty, setQty] = useState('')
   const [totalInput, setTotalInput] = useState('')
   const [amountMode, setAmountMode] = useState<'qty' | 'total'>('qty')
@@ -31,7 +43,7 @@ export function OrderForm() {
   // Order book'tan fiyata tiklayinca: limit moduna gec + fiyati doldur
   useEffect(() => {
     if (ticket) {
-      setType('LIMIT')
+      setMode('LIMIT')
       setPrice(String(ticket.price))
     }
   }, [ticket])
@@ -61,7 +73,9 @@ export function OrderForm() {
   const usdt = portfolio?.usdtBalance ?? 0
   const position = portfolio?.positions.find((p) => p.asset === asset)
   const posQty = position?.qty ?? 0
-  const effectivePrice = type === 'LIMIT' ? Number(price) || livePrice || 0 : livePrice || 0
+  const usesLimitPrice = mode === 'LIMIT' || mode === 'STOP_LIMIT'
+  const effectivePrice = usesLimitPrice ? Number(price) || livePrice || 0 : livePrice || 0
+  const isConditional = mode === 'STOP_LIMIT' || mode === 'OCO'
 
   // Miktar (base varlik) ya da Tutar (USDT) ile gir
   const submitQty =
@@ -86,25 +100,62 @@ export function OrderForm() {
     }
   }
 
+  const resetInputs = () => {
+    setQty('')
+    setTotalInput('')
+  }
+
   const onSubmit = (e: FormEvent) => {
     e.preventDefault()
     if (!submitQty || submitQty <= 0) {
       toast.error('Geçerli miktar/tutar gir')
       return
     }
-    if (type === 'LIMIT' && (!Number(price) || Number(price) <= 0)) {
+    if (usesLimitPrice && (!Number(price) || Number(price) <= 0)) {
       toast.error('Limit fiyatı gir')
       return
     }
+
+    // Koşullu emirler: backend'e gitmez, tetiklenince LIMIT'e doner (client watcher).
+    if (mode === 'STOP_LIMIT') {
+      if (!Number(stopPrice)) {
+        toast.error('Stop (tetik) fiyatı gir')
+        return
+      }
+      addConditional({ symbol, side, kind: 'STOP_LIMIT', qty: submitQty, stopPrice: Number(stopPrice), limitPrice: Number(price) })
+      toast.success(`Stop-Limit emri kuruldu: ${asset}`)
+      pushNotification(`Stop-Limit kuruldu: ${asset}`)
+      resetInputs()
+      return
+    }
+    if (mode === 'OCO') {
+      if (!Number(tpPrice) || !Number(stopPrice) || !Number(price)) {
+        toast.error('OCO için TP / Stop / Stop-Limit fiyatlarını gir')
+        return
+      }
+      addConditional({
+        symbol,
+        side,
+        kind: 'OCO',
+        qty: submitQty,
+        tpPrice: Number(tpPrice),
+        stopPrice: Number(stopPrice),
+        limitPrice: Number(price),
+      })
+      toast.success(`OCO emri kuruldu: ${asset}`)
+      pushNotification(`OCO kuruldu: ${asset}`)
+      resetInputs()
+      return
+    }
+
     place.mutate(
-      { symbol, side, type, qty: submitQty, price: type === 'LIMIT' ? Number(price) : undefined },
+      { symbol, side, type: mode, qty: submitQty, price: mode === 'LIMIT' ? Number(price) : undefined },
       {
         onSuccess: () => {
           const label = side === 'BUY' ? 'alış' : 'satış'
           toast.success(`${asset} ${label} emri verildi`)
-          pushNotification(`${type === 'LIMIT' ? 'Limit' : 'Piyasa'} ${label}: ${asset}`)
-          setQty('')
-          setTotalInput('')
+          pushNotification(`${mode === 'LIMIT' ? 'Limit' : 'Piyasa'} ${label}: ${asset}`)
+          resetInputs()
         },
         onError: (err) => toast.error((err as unknown as ApiError).message ?? 'Emir başarısız'),
       },
@@ -135,15 +186,15 @@ export function OrderForm() {
         </button>
       </div>
 
-      {/* Market / Limit */}
-      <div className="mb-3 flex gap-3 text-xs">
-        {(['MARKET', 'LIMIT'] as OrderType[]).map((t) => (
+      {/* Emir turu: Piyasa / Limit / Stop-Limit / OCO */}
+      <div className="mb-3 flex flex-wrap gap-x-3 gap-y-1 text-xs">
+        {MODES.map((m) => (
           <button
-            key={t}
-            onClick={() => setType(t)}
-            className={`transition ${type === t ? 'font-semibold text-bn-gold' : 'text-bn-sub hover:text-bn-txt'}`}
+            key={m.key}
+            onClick={() => setMode(m.key)}
+            className={`transition ${mode === m.key ? 'font-semibold text-bn-gold' : 'text-bn-sub hover:text-bn-txt'}`}
           >
-            {t === 'MARKET' ? 'Piyasa' : 'Limit'}
+            {m.label}
           </button>
         ))}
       </div>
@@ -158,25 +209,40 @@ export function OrderForm() {
           )}
         </div>
 
-        {/* Fiyat */}
-        <Field label="Fiyat (USDT)">
-          {type === 'MARKET' ? (
+        {/* Fiyat(lar) — moda gore */}
+        {mode === 'MARKET' && (
+          <Field label="Fiyat (USDT)">
             <div className="flex items-center justify-between rounded-md border border-bn-line bg-bn-panel2 px-3 py-2 text-sm text-bn-sub">
               <span>Piyasa</span>
               <span className="font-mono text-bn-txt">
                 {livePrice != null ? fmtPrice(symbol, livePrice) : '—'}
               </span>
             </div>
-          ) : (
-            <input
-              value={price}
-              onChange={(e) => setPrice(e.target.value)}
-              inputMode="decimal"
-              placeholder={livePrice != null ? fmtPrice(symbol, livePrice) : '0.00'}
-              className="w-full rounded-md border border-bn-line bg-bn-panel2 px-3 py-2 text-sm text-bn-txt outline-none focus:border-bn-gold/50"
-            />
-          )}
-        </Field>
+          </Field>
+        )}
+
+        {mode === 'OCO' && (
+          <Field label="Take-Profit fiyatı (USDT)">
+            <PriceInput value={tpPrice} onChange={setTpPrice} placeholder={livePrice != null ? fmtPrice(symbol, livePrice) : '0.00'} />
+          </Field>
+        )}
+
+        {isConditional && (
+          <Field label="Stop / tetik fiyatı (USDT)">
+            <PriceInput value={stopPrice} onChange={setStopPrice} placeholder={livePrice != null ? fmtPrice(symbol, livePrice) : '0.00'} />
+          </Field>
+        )}
+
+        {usesLimitPrice && (
+          <Field label={mode === 'STOP_LIMIT' ? 'Limit fiyatı (USDT)' : 'Fiyat (USDT)'}>
+            <PriceInput value={price} onChange={setPrice} placeholder={livePrice != null ? fmtPrice(symbol, livePrice) : '0.00'} />
+          </Field>
+        )}
+        {mode === 'OCO' && (
+          <Field label="Limit fiyatı (stop tetiklenince) (USDT)">
+            <PriceInput value={price} onChange={setPrice} placeholder={livePrice != null ? fmtPrice(symbol, livePrice) : '0.00'} />
+          </Field>
+        )}
 
         {/* Miktar / Tutar */}
         <div className="mb-1 flex items-center justify-between">
@@ -258,7 +324,11 @@ export function OrderForm() {
             isBuy ? 'bg-bn-up text-bn-bg hover:opacity-90' : 'bg-bn-down text-white hover:opacity-90'
           }`}
         >
-          {isBuy ? `Al ${asset}` : `Sat ${asset}`}
+          {isConditional
+            ? `${mode === 'OCO' ? 'OCO' : 'Stop-Limit'} kur (${isBuy ? 'Al' : 'Sat'})`
+            : isBuy
+              ? `Al ${asset}`
+              : `Sat ${asset}`}
         </button>
       </form>
     </div>
@@ -271,5 +341,25 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
       <span className="mb-1 block text-[11px] text-bn-sub">{label}</span>
       {children}
     </label>
+  )
+}
+
+function PriceInput({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string
+  onChange: (v: string) => void
+  placeholder: string
+}) {
+  return (
+    <input
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      inputMode="decimal"
+      placeholder={placeholder}
+      className="w-full rounded-md border border-bn-line bg-bn-panel2 px-3 py-2 text-sm text-bn-txt outline-none focus:border-bn-gold/50"
+    />
   )
 }

@@ -1,10 +1,18 @@
 import { useEffect, useState } from 'react'
-import { Moon, Search, Sun } from 'lucide-react'
+import { BarChart3, Bell, LineChart, Moon, Search, Sun, Wallet } from 'lucide-react'
 import { useMarketTickers } from '@/hooks/useMarketTickers'
 import { useActiveSymbol } from '@/hooks/useActiveSymbol'
 import { useTheme } from '@/hooks/useTheme'
+import { navigateTo, type Route } from '@/hooks/useRoute'
 import { CoinIcon } from '@/components/trade/CoinIcon'
 import { fmtPrice } from '@/lib/symbolFormat'
+
+const PAGES: { route: Route; label: string; icon: typeof LineChart }[] = [
+  { route: 'trade', label: 'İşlem terminali', icon: LineChart },
+  { route: 'markets', label: 'Marketler', icon: BarChart3 },
+  { route: 'portfolio', label: 'Portföy', icon: Wallet },
+  { route: 'alarms', label: 'Alarmlar', icon: Bell },
+]
 
 /** Cmd/Ctrl+K ile acilan hizli komut paleti: coin ara + global komutlar. */
 export function CommandPalette() {
@@ -37,9 +45,15 @@ export function CommandPalette() {
     .filter((t) => !q || t.symbol.includes(q.toUpperCase()))
     .slice(0, 8)
   const themeMatch = !q || 'tema'.includes(q.toLowerCase()) || 'theme'.includes(q.toLowerCase())
+  const pages = PAGES.filter((p) => !q || p.label.toLowerCase().includes(q.toLowerCase()))
 
   const pick = (s: string) => {
     setSymbol(s)
+    setOpen(false)
+  }
+
+  const goto = (r: Route) => {
+    navigateTo(r)
     setOpen(false)
   }
 
@@ -63,6 +77,24 @@ export function CommandPalette() {
           />
         </div>
         <div className="max-h-80 overflow-y-auto p-1">
+          {pages.length > 0 && (
+            <>
+              <p className="px-3 pb-1 pt-2 text-[10px] uppercase tracking-wide text-bn-sub">Sayfalar</p>
+              {pages.map((p) => {
+                const Icon = p.icon
+                return (
+                  <button
+                    key={p.route}
+                    onClick={() => goto(p.route)}
+                    className="flex w-full items-center gap-2 rounded px-3 py-2 text-sm text-bn-txt transition hover:bg-bn-line"
+                  >
+                    <Icon className="h-4 w-4 text-bn-gold" />
+                    {p.label}
+                  </button>
+                )
+              })}
+            </>
+          )}
           {themeMatch && (
             <button
               onClick={() => {

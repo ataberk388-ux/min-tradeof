@@ -6,6 +6,7 @@ import { AlarmForm } from '@/components/AlarmForm'
 import { AlarmList } from '@/components/AlarmList'
 import { useCancelOrder, usePaperOrders } from '@/hooks/usePaper'
 import { usePortfolioValue } from '@/hooks/usePortfolioValue'
+import { useConditionalOrders } from '@/hooks/useConditionalOrders'
 import { formatNum } from '@/lib/format'
 import { fmtPrice, fmtQty } from '@/lib/symbolFormat'
 import type { ApiError } from '@/lib/api'
@@ -13,6 +14,7 @@ import type { PaperOrder } from '@/lib/paper'
 
 export function BottomTabs() {
   const { data: orders } = usePaperOrders()
+  const { orders: conditional } = useConditionalOrders()
   const openOrders = (orders ?? []).filter((o) => o.status === 'OPEN')
   const closedOrders = (orders ?? []).filter((o) => o.status !== 'OPEN')
 
@@ -20,6 +22,7 @@ export function BottomTabs() {
     <Tabs.Root defaultValue="open" className="flex h-full flex-col bg-bn-panel">
       <Tabs.List className="flex gap-5 border-b border-bn-line px-3 text-xs">
         <Trigger value="open">Açık Emirler ({openOrders.length})</Trigger>
+        <Trigger value="conditional">Koşullu ({conditional.length})</Trigger>
         <Trigger value="history">Emir Geçmişi</Trigger>
         <Trigger value="positions">Pozisyonlar</Trigger>
         <Trigger value="alarms">Alarmlarım</Trigger>
@@ -28,6 +31,9 @@ export function BottomTabs() {
       <div className="min-h-0 flex-1 overflow-y-auto">
         <Tabs.Content value="open">
           <OrdersTable orders={openOrders} cancellable />
+        </Tabs.Content>
+        <Tabs.Content value="conditional">
+          <ConditionalTable />
         </Tabs.Content>
         <Tabs.Content value="history">
           <OrdersTable orders={closedOrders} />
@@ -43,6 +49,60 @@ export function BottomTabs() {
         </Tabs.Content>
       </div>
     </Tabs.Root>
+  )
+}
+
+function ConditionalTable() {
+  const { orders, remove } = useConditionalOrders()
+  if (orders.length === 0) {
+    return <p className="p-4 text-center text-xs text-bn-sub">Koşullu emir yok — emir formundan Stop-Limit / OCO kur</p>
+  }
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[520px] text-xs">
+        <thead>
+          <tr className="text-left text-[10px] uppercase tracking-wide text-bn-sub">
+            <th className="px-3 py-1.5 font-medium">Çift</th>
+            <th className="px-3 py-1.5 font-medium">Tür</th>
+            <th className="px-3 py-1.5 font-medium">Yön</th>
+            <th className="px-3 py-1.5 text-right font-medium">Stop</th>
+            <th className="px-3 py-1.5 text-right font-medium">Limit</th>
+            <th className="px-3 py-1.5 text-right font-medium">TP</th>
+            <th className="px-3 py-1.5 text-right font-medium">Miktar</th>
+            <th className="px-3 py-1.5" />
+          </tr>
+        </thead>
+        <tbody>
+          {orders.map((o) => (
+            <tr key={o.id} className="border-t border-bn-line/60">
+              <td className="px-3 py-1.5 font-medium text-bn-txt">{o.symbol}</td>
+              <td className="px-3 py-1.5 text-bn-gold">{o.kind === 'OCO' ? 'OCO' : 'Stop-Limit'}</td>
+              <td className={`px-3 py-1.5 ${o.side === 'BUY' ? 'text-bn-up' : 'text-bn-down'}`}>
+                {o.side === 'BUY' ? 'AL' : 'SAT'}
+              </td>
+              <td className="px-3 py-1.5 text-right font-mono text-bn-txt">{fmtPrice(o.symbol, o.stopPrice)}</td>
+              <td className="px-3 py-1.5 text-right font-mono text-bn-txt">{fmtPrice(o.symbol, o.limitPrice)}</td>
+              <td className="px-3 py-1.5 text-right font-mono text-bn-sub">
+                {o.tpPrice != null ? fmtPrice(o.symbol, o.tpPrice) : '—'}
+              </td>
+              <td className="px-3 py-1.5 text-right font-mono text-bn-txt">{fmtQty(o.symbol, o.qty)}</td>
+              <td className="px-3 py-1.5 text-right">
+                <button
+                  onClick={() => {
+                    remove(o.id)
+                    toast.success('Koşullu emir kaldırıldı')
+                  }}
+                  className="text-bn-sub transition hover:text-bn-down"
+                  aria-label="Kaldır"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   )
 }
 

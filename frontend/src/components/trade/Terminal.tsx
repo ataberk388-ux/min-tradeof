@@ -6,6 +6,7 @@ import { OrderTicketProvider } from '@/hooks/useOrderTicket'
 import { useAlarmStream } from '@/hooks/useAlarmStream'
 import { useExchangeInfo } from '@/hooks/useExchangeInfo'
 import { useIsMobile } from '@/hooks/useIsMobile'
+import { useConditionalWatcher } from '@/hooks/useConditionalWatcher'
 
 /**
  * Terminal kabugu: ortak provider'lar + akislar, sonra ekran genisligine gore
@@ -14,6 +15,7 @@ import { useIsMobile } from '@/hooks/useIsMobile'
 export function Terminal() {
   useAlarmStream()
   useExchangeInfo()
+  useConditionalWatcher()
   const isMobile = useIsMobile()
 
   return (

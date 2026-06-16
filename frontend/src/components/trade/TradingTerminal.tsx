@@ -9,6 +9,10 @@ import { RecentTrades } from '@/components/trade/RecentTrades'
 import { SymbolHeader } from '@/components/trade/SymbolHeader'
 import { TerminalTopbar } from '@/components/trade/TerminalTopbar'
 import { WatchlistBar } from '@/components/trade/WatchlistBar'
+import { MarketsPage } from '@/components/pages/MarketsPage'
+import { PortfolioPage } from '@/components/pages/PortfolioPage'
+import { AlarmsPage } from '@/components/pages/AlarmsPage'
+import { useRoute } from '@/hooks/useRoute'
 
 /** Dikey panel kenari (yatay PanelGroup icinde) — surukle ile genislik ayari. */
 function VHandle() {
@@ -24,11 +28,29 @@ function HHandle() {
   )
 }
 
-/** Masaustu Binance spot duzeni — surukle ile boyutlandirilabilir paneller. */
+/** Masaustu kabuk: kalici ust nav + rotaya gore govde (terminal / markets / portfoy / alarmlar). */
 export function DesktopTerminal() {
+  const { route } = useRoute()
   return (
-      <div className="flex h-screen flex-col overflow-hidden bg-bn-bg text-bn-txt">
-        <TerminalTopbar />
+    <div className="flex h-screen flex-col overflow-hidden bg-bn-bg text-bn-txt">
+      <TerminalTopbar />
+      {route === 'trade' ? (
+        <TradeBody />
+      ) : (
+        <div className="min-h-0 flex-1 overflow-hidden">
+          {route === 'markets' && <MarketsPage />}
+          {route === 'portfolio' && <PortfolioPage />}
+          {route === 'alarms' && <AlarmsPage />}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Binance spot islem duzeni — surukle ile boyutlandirilabilir paneller. */
+function TradeBody() {
+  return (
+      <>
         <WatchlistBar />
         <SymbolHeader />
 
@@ -78,6 +100,6 @@ export function DesktopTerminal() {
             </Panel>
           </PanelGroup>
         </div>
-      </div>
+      </>
   )
 }
