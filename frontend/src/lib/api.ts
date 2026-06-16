@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { AlarmDirection, CreateAlarmInput, LoginInput, RegisterInput } from './schema'
+import type { AlarmDirection, AlarmType, CreateAlarmInput, LoginInput, RegisterInput } from './schema'
 import { clearAuth, getToken, UNAUTHORIZED_EVENT } from './auth'
 
 /** Backend'in dondurdugu alarm temsili (AlarmResponse). */
@@ -8,6 +8,7 @@ export interface Alarm {
   symbol: string
   targetPrice: number
   direction: AlarmDirection
+  type: AlarmType
   active: boolean
   createdAt: string
   triggeredAt: string | null

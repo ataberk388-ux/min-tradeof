@@ -31,10 +31,10 @@ export function OrderBook() {
     }
   }, [symbol])
 
-  // Gruplama secenekleri: tickSize, x10, x100
+  // Gruplama secenekleri: tickSize, x10, x100, x1000 (Binance hassasiyet secici)
   const baseTick = Math.pow(10, -priceDecimals(symbol, depth.asks[0]?.price))
   const groupOptions = useMemo(
-    () => [baseTick, baseTick * 10, baseTick * 100],
+    () => [baseTick, baseTick * 10, baseTick * 100, baseTick * 1000],
     [baseTick],
   )
   const [group, setGroup] = useState<number | null>(null)
@@ -214,10 +214,12 @@ function Row({
   return (
     <div
       onClick={onClick}
+      title={`Birikimli: ${fmtQty(symbol, lvl.total)}`}
       className="relative grid cursor-pointer grid-cols-3 px-3 py-[3px] font-mono text-[11px] tabular-nums hover:bg-bn-line/40"
     >
+      {/* Birikimli derinlik bar'i (Binance) — saga dogru kumulatif hacim orani */}
       <div
-        className={`absolute inset-y-0 right-0 ${side === 'ask' ? 'bg-bn-down/10' : 'bg-bn-up/10'}`}
+        className={`absolute inset-y-0 right-0 ${side === 'ask' ? 'bg-bn-down/20' : 'bg-bn-up/20'}`}
         style={{ width: `${pct}%` }}
       />
       <span className={`relative ${side === 'ask' ? 'text-bn-down' : 'text-bn-up'}`}>

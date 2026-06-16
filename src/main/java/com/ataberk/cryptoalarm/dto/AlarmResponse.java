@@ -2,6 +2,7 @@ package com.ataberk.cryptoalarm.dto;
 
 import com.ataberk.cryptoalarm.domain.Alarm;
 import com.ataberk.cryptoalarm.domain.AlarmDirection;
+import com.ataberk.cryptoalarm.domain.AlarmType;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -14,6 +15,7 @@ public record AlarmResponse(
         String symbol,
         BigDecimal targetPrice,
         AlarmDirection direction,
+        AlarmType type,
         boolean active,
         Instant createdAt,
         Instant triggeredAt
@@ -24,6 +26,7 @@ public record AlarmResponse(
                 alarm.getSymbol(),
                 alarm.getTargetPrice(),
                 alarm.getDirection(),
+                alarm.getType() == null ? AlarmType.PRICE : alarm.getType(),
                 alarm.isActive(),
                 alarm.getCreatedAt(),
                 alarm.getTriggeredAt());

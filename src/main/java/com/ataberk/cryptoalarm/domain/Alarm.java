@@ -49,6 +49,11 @@ public class Alarm {
     @Column(nullable = false)
     private AlarmDirection direction;
 
+    /** Alarm turu. Eski kayitlarda null gelebilir; mantikta null = PRICE kabul edilir. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "type")
+    private AlarmType type = AlarmType.PRICE;
+
     @Column(name = "is_active", nullable = false)
     private boolean active = true;
 
@@ -84,13 +89,32 @@ public class Alarm {
     }
 
     /**
-     * Verilen anlik fiyatin bu alarmi tetikleyip tetiklemedigini soyler.
-     * compareTo kullanilir (BigDecimal'de equals scale'e duyarlidir).
+     * Geriye donuk uyumluluk: yalniz fiyatla degerlendirir (PRICE turu, testler).
      */
     public boolean isTriggeredBy(BigDecimal currentPrice) {
         return switch (direction) {
             case ABOVE -> currentPrice.compareTo(targetPrice) >= 0;
             case BELOW -> currentPrice.compareTo(targetPrice) <= 0;
         };
+    }
+
+    /**
+     * Gelen tick (son fiyat + 24s yuzde degisim) bu alarmi tetikler mi?
+     * PRICE turu fiyatla; PERCENT turu yuzde degisimle karsilastirir. PERCENT alarmlari
+     * yalniz @ticker tick'lerinde ({@code changePercent != null}) degerlendirilebilir.
+     */
+    public boolean isTriggeredBy(BigDecimal currentPrice, Double changePercent) {
+        AlarmType t = (type == null) ? AlarmType.PRICE : type;
+        if (t == AlarmType.PERCENT) {
+            if (changePercent == null) {
+                return false;
+            }
+            double threshold = targetPrice.doubleValue();
+            return switch (direction) {
+                case ABOVE -> changePercent >= threshold;
+                case BELOW -> changePercent <= -threshold;
+            };
+        }
+        return isTriggeredBy(currentPrice);
     }
 }

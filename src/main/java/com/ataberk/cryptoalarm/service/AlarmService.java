@@ -2,6 +2,7 @@ package com.ataberk.cryptoalarm.service;
 
 import com.ataberk.cryptoalarm.cache.AlarmStore;
 import com.ataberk.cryptoalarm.domain.Alarm;
+import com.ataberk.cryptoalarm.domain.AlarmType;
 import com.ataberk.cryptoalarm.dto.CreateAlarmRequest;
 import com.ataberk.cryptoalarm.repository.AlarmRepository;
 import lombok.RequiredArgsConstructor;
@@ -31,6 +32,7 @@ public class AlarmService {
                 normalizeSymbol(request.symbol()),
                 request.targetPrice(),
                 request.direction());
+        alarm.setType(request.type() == null ? AlarmType.PRICE : request.type());
         alarm.setUserId(userId);
         // Yeni alarm listenin sonuna dussun
         alarm.setSortOrder((int) alarmRepository.countByUserIdAndActiveTrue(userId));
@@ -57,6 +59,9 @@ public class AlarmService {
         alarmStore.remove(alarm);
         alarm.setTargetPrice(request.targetPrice());
         alarm.setDirection(request.direction());
+        if (request.type() != null) {
+            alarm.setType(request.type());
+        }
         Alarm saved = alarmRepository.save(alarm);
         alarmStore.add(saved);
         return saved;

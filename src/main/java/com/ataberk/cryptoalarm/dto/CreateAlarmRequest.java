@@ -1,6 +1,7 @@
 package com.ataberk.cryptoalarm.dto;
 
 import com.ataberk.cryptoalarm.domain.AlarmDirection;
+import com.ataberk.cryptoalarm.domain.AlarmType;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
@@ -9,6 +10,7 @@ import java.math.BigDecimal;
 
 /**
  * Alarm olusturma istegi. Entity dogrudan API'ye acilmaz; gelen veri burada dogrulanir.
+ * {@code type} verilmezse PRICE varsayilir; PERCENT'te targetPrice yuzde buyuklugudur.
  */
 public record CreateAlarmRequest(
 
@@ -20,6 +22,8 @@ public record CreateAlarmRequest(
         BigDecimal targetPrice,
 
         @NotNull(message = "direction zorunlu (ABOVE veya BELOW)")
-        AlarmDirection direction
+        AlarmDirection direction,
+
+        AlarmType type
 ) {
 }

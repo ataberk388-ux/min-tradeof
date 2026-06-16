@@ -40,8 +40,9 @@ public class RuleEngine implements PriceTickHandler {
             return;
         }
         BigDecimal price = tick.price();
+        Double changePercent = tick.changePercent();
         for (Alarm alarm : alarms) {
-            if (alarm.isTriggeredBy(price) && alarm.tryClaimTrigger()) {
+            if (alarm.isTriggeredBy(price, changePercent) && alarm.tryClaimTrigger()) {
                 alarmStore.remove(alarm);
                 triggerHandler.onTriggered(alarm, price);
             }

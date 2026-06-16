@@ -445,7 +445,7 @@ export function ChartPanel() {
     const direction = price >= last ? 'ABOVE' : 'BELOW'
     const target = price.toFixed(priceDecimals(symbol, price))
     createAlarm.mutate(
-      { symbol, targetPrice: target, direction },
+      { symbol, targetPrice: target, direction, type: 'PRICE' },
       {
         onSuccess: () =>
           toast.success(`Alarm kuruldu: ${symbol} ${direction === 'ABOVE' ? '≥' : '≤'} ${target}`),

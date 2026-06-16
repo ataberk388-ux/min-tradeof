@@ -4,17 +4,22 @@ import { z } from 'zod'
 export const alarmDirections = ['ABOVE', 'BELOW'] as const
 export type AlarmDirection = (typeof alarmDirections)[number]
 
+/** Backend'deki AlarmType ile birebir ayni. PRICE = fiyat, PERCENT = 24s yuzde degisim. */
+export const alarmTypes = ['PRICE', 'PERCENT'] as const
+export type AlarmType = (typeof alarmTypes)[number]
+
 /**
  * Form dogrulama semasi. Backend'deki @Valid kurallarini frontend'de aynalar:
- * sembol bos olamaz, fiyat pozitif, yon zorunlu.
+ * sembol bos olamaz, hedef deger pozitif, yon zorunlu. PERCENT'te hedef = yuzde buyuklugu.
  */
 export const createAlarmSchema = z.object({
   symbol: z.string().trim().min(1, 'Sembol zorunlu'),
   targetPrice: z
     .string()
-    .min(1, 'Hedef fiyat zorunlu')
-    .refine((value) => Number(value) > 0, 'Fiyat pozitif olmali'),
+    .min(1, 'Hedef değer zorunlu')
+    .refine((value) => Number(value) > 0, 'Değer pozitif olmalı'),
   direction: z.enum(alarmDirections),
+  type: z.enum(alarmTypes),
 })
 
 export type CreateAlarmInput = z.infer<typeof createAlarmSchema>

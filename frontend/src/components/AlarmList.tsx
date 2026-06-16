@@ -66,7 +66,7 @@ export function AlarmList() {
       return
     }
     updateMutation.mutate(
-      { id: alarm.id, input: { symbol: alarm.symbol, targetPrice, direction } },
+      { id: alarm.id, input: { symbol: alarm.symbol, targetPrice, direction, type: alarm.type ?? 'PRICE' } },
       {
         onSuccess: () => {
           toast.success('Alarm güncellendi')
@@ -215,9 +215,16 @@ function SortableAlarmRow({
           {isUp ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
         </span>
         <div className="text-left">
-          <p className="text-sm font-semibold text-bn-txt">{alarm.symbol}</p>
+          <p className="flex items-center gap-1.5 text-sm font-semibold text-bn-txt">
+            {alarm.symbol}
+            {alarm.type === 'PERCENT' && (
+              <span className="rounded bg-bn-gold/15 px-1 py-0.5 text-[9px] font-medium text-bn-gold">%</span>
+            )}
+          </p>
           <p className="text-xs text-bn-sub">
-            {isUp ? 'Yükselince' : 'Düşünce'} · {formatNum(alarm.targetPrice)}
+            {alarm.type === 'PERCENT'
+              ? `${isUp ? '+' : '−'}%${formatNum(alarm.targetPrice)} 24s değişimde`
+              : `${isUp ? 'Yükselince' : 'Düşünce'} · ${formatNum(alarm.targetPrice)}`}
           </p>
         </div>
       </div>

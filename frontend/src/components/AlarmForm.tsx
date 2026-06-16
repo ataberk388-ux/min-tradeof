@@ -22,11 +22,15 @@ export function AlarmForm() {
     handleSubmit,
     control,
     reset,
+    watch,
     formState: { errors },
   } = useForm<CreateAlarmInput>({
     resolver: zodResolver(createAlarmSchema),
-    defaultValues: { symbol: '', targetPrice: '', direction: 'ABOVE' },
+    defaultValues: { symbol: '', targetPrice: '', direction: 'ABOVE', type: 'PRICE' },
   })
+
+  const type = watch('type')
+  const isPercent = type === 'PERCENT'
 
   const onSubmit = (values: CreateAlarmInput) => {
     createMutation.mutate(values, {
@@ -47,26 +51,54 @@ export function AlarmForm() {
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="targetPrice">Hedef fiyat</Label>
-        <Input id="targetPrice" inputMode="decimal" placeholder="60000" {...register('targetPrice')} />
+        <Label>Alarm türü</Label>
+        <Controller
+          control={control}
+          name="type"
+          render={({ field }) => (
+            <Select value={field.value} onValueChange={field.onChange}>
+              <SelectTrigger>
+                <SelectValue placeholder="Tür seçin" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="PRICE">Fiyat — hedef fiyata gelince</SelectItem>
+                <SelectItem value="PERCENT">% Değişim — 24s yüzde eşiği</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="targetPrice">{isPercent ? 'Yüzde eşiği (%)' : 'Hedef fiyat'}</Label>
+        <Input
+          id="targetPrice"
+          inputMode="decimal"
+          placeholder={isPercent ? '5' : '60000'}
+          {...register('targetPrice')}
+        />
         {errors.targetPrice && (
           <p className="text-sm text-destructive">{errors.targetPrice.message}</p>
         )}
       </div>
 
       <div className="space-y-2">
-        <Label>Yon</Label>
+        <Label>Yön</Label>
         <Controller
           control={control}
           name="direction"
           render={({ field }) => (
             <Select value={field.value} onValueChange={field.onChange}>
               <SelectTrigger>
-                <SelectValue placeholder="Yon secin" />
+                <SelectValue placeholder="Yön seçin" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="ABOVE">ABOVE — fiyat yukselince</SelectItem>
-                <SelectItem value="BELOW">BELOW — fiyat dusunce</SelectItem>
+                <SelectItem value="ABOVE">
+                  {isPercent ? 'ABOVE — %+eşik üstüne çıkınca' : 'ABOVE — fiyat yükselince'}
+                </SelectItem>
+                <SelectItem value="BELOW">
+                  {isPercent ? 'BELOW — %−eşik altına inince' : 'BELOW — fiyat düşünce'}
+                </SelectItem>
               </SelectContent>
             </Select>
           )}
