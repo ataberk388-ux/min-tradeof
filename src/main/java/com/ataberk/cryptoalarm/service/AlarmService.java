@@ -4,6 +4,7 @@ import com.ataberk.cryptoalarm.cache.AlarmStore;
 import com.ataberk.cryptoalarm.domain.Alarm;
 import com.ataberk.cryptoalarm.domain.AlarmType;
 import com.ataberk.cryptoalarm.dto.CreateAlarmRequest;
+import com.ataberk.cryptoalarm.ingestion.BinanceWebSocketClient;
 import com.ataberk.cryptoalarm.repository.AlarmRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -24,6 +25,7 @@ public class AlarmService {
 
     private final AlarmRepository alarmRepository;
     private final AlarmStore alarmStore;
+    private final BinanceWebSocketClient webSocketClient;
 
     /** Yeni alarm olusturur: DB'ye yazar, ardindan RAM cache'ine ekler. Sahibi {@code userId}. */
     @Transactional
@@ -38,6 +40,8 @@ public class AlarmService {
         alarm.setSortOrder((int) alarmRepository.countByUserIdAndActiveTrue(userId));
         Alarm saved = alarmRepository.save(alarm);
         alarmStore.add(saved);
+        // Feed yalniz config sembolleriyle sinirli kalmasin: alarm kurulan sembole canli abone ol.
+        webSocketClient.ensureSubscribed(saved.getSymbol());
         return saved;
     }
 

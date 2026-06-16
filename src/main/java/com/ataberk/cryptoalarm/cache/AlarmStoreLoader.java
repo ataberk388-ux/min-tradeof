@@ -1,6 +1,7 @@
 package com.ataberk.cryptoalarm.cache;
 
 import com.ataberk.cryptoalarm.domain.Alarm;
+import com.ataberk.cryptoalarm.ingestion.BinanceWebSocketClient;
 import com.ataberk.cryptoalarm.repository.AlarmRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -22,11 +23,14 @@ public class AlarmStoreLoader {
 
     private final AlarmRepository alarmRepository;
     private final AlarmStore alarmStore;
+    private final BinanceWebSocketClient webSocketClient;
 
     @EventListener(ApplicationReadyEvent.class)
     public void loadActiveAlarms() {
         List<Alarm> active = alarmRepository.findByActiveTrue();
         active.forEach(alarmStore::add);
+        // Mevcut alarmlarin sembollerine de canli abone ol (config disindakiler dahil).
+        active.stream().map(Alarm::getSymbol).distinct().forEach(webSocketClient::ensureSubscribed);
         log.info("Alarm store yuklendi: {} aktif alarm", active.size());
     }
 }

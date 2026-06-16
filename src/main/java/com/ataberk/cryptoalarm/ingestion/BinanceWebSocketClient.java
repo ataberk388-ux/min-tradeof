@@ -1,6 +1,7 @@
 package com.ataberk.cryptoalarm.ingestion;
 
 import com.ataberk.cryptoalarm.config.ExchangeProperties;
+import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import jakarta.websocket.ClientEndpointConfig;
 import jakarta.websocket.CloseReason;
@@ -16,12 +17,16 @@ import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
 import java.net.URI;
+import java.util.Collection;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Borsanin (Binance) WebSocket akisina kalici baglanti tutan ingestion istemcisi.
@@ -55,9 +60,37 @@ public class BinanceWebSocketClient {
             });
 
     private final AtomicInteger reconnectAttempts = new AtomicInteger(0);
+    /** SUBSCRIBE mesajlari icin artan id (Binance her istek icin bir id bekler). */
+    private final AtomicInteger messageId = new AtomicInteger(0);
     private volatile Session session;
     private volatile boolean running = true;
     private volatile boolean connected = false;
+
+    /** Abone olunan semboller (config + alarm kurulan yeni semboller). Thread-safe. */
+    private final Set<String> symbols = ConcurrentHashMap.newKeySet();
+
+    /** Config'teki baslangic sembolleriyle tohumla. */
+    @PostConstruct
+    void seedSymbols() {
+        properties.getSymbols().forEach(s -> symbols.add(s.toUpperCase()));
+    }
+
+    /**
+     * Bir sembole abone oldugundan emin olur (alarm kurulunca cagrilir). Henuz abone degilse
+     * ekler; baglanti acaksa SUBSCRIBE mesajiyla aninda abone olur, kapaliysa sonraki
+     * baglantida tum sembollerle birlikte abone olunur. Boylece feed yalniz config'le sinirli kalmaz.
+     */
+    public void ensureSubscribed(String symbol) {
+        String s = symbol.trim().toUpperCase();
+        if (!symbols.add(s)) {
+            return; // zaten takip ediliyor
+        }
+        Session sess = session;
+        if (sess != null && sess.isOpen()) {
+            sendSubscribe(sess, List.of(s));
+            log.info("Yeni sembole abone olundu: {}", s);
+        }
+    }
 
     /** Borsa baglantisi su an acik mi (istatistik panelinde gosterilir). */
     public boolean isConnected() {
@@ -126,18 +159,27 @@ public class BinanceWebSocketClient {
         });
     }
 
+    /** Baglanti acilinca o ana kadar bilinen tum sembollere abone ol. */
     private void subscribe(Session sess) {
+        sendSubscribe(sess, symbols);
+        log.info("Abone olunan semboller: {}", symbols);
+    }
+
+    /** Verilen semboller icin @trade + @ticker akislarina SUBSCRIBE mesaji gonderir. */
+    private void sendSubscribe(Session sess, Collection<String> targets) {
+        if (targets.isEmpty()) {
+            return;
+        }
         // Her sembol icin iki akis: @trade (yuksek frekans, motor) + @ticker (24s % degisim, markets)
-        List<String> streams = properties.getSymbols().stream()
-                .flatMap(symbol -> java.util.stream.Stream.of(
+        List<String> streams = targets.stream()
+                .flatMap(symbol -> Stream.of(
                         symbol.toLowerCase() + "@trade",
                         symbol.toLowerCase() + "@ticker"))
                 .toList();
         String payload = "{\"method\":\"SUBSCRIBE\",\"params\":["
                 + streams.stream().map(s -> "\"" + s + "\"").collect(Collectors.joining(","))
-                + "],\"id\":1}";
+                + "],\"id\":" + messageId.incrementAndGet() + "}";
         sess.getAsyncRemote().sendText(payload);
-        log.info("Abone olunan stream'ler: {}", streams);
     }
 
     private void scheduleReconnect() {

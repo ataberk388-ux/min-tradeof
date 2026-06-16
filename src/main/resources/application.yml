@@ -19,11 +19,26 @@ security:
     expiry-minutes: 10080
 
 # Dis borsa baglanti ayarlari
+# Port 9443 bazi aglarda/firewall'larda kapali; 443 her zaman acik (REST gibi).
+# symbols yalnizca BASLANGIC tohumu; alarm kurulan yeni sembollere runtime'da otomatik abone olunur.
 exchange:
-  ws-url: wss://stream.binance.com:9443/ws
+  ws-url: wss://stream.binance.com:443/ws
   symbols:
     - BTCUSDT
     - ETHUSDT
+    - BNBUSDT
+    - SOLUSDT
+    - XRPUSDT
+    - ADAUSDT
+    - DOGEUSDT
+    - AVAXUSDT
+    - LINKUSDT
+    - DOTUSDT
+    - TRXUSDT
+    - MATICUSDT
+    - LTCUSDT
+    - NEARUSDT
+    - APTUSDT
 
 management:
   endpoints:
