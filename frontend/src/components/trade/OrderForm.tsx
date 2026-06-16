@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { TrendingDown, TrendingUp } from 'lucide-react'
 import { toast } from 'sonner'
 import { closeWs, openTickerStream } from '@/lib/binance'
 import { useActiveSymbol } from '@/hooks/useActiveSymbol'
 import { useOrderTicket } from '@/hooks/useOrderTicket'
 import { pushNotification } from '@/hooks/useNotifications'
-import { useFillOrder, usePaperOrders, usePlaceOrder, usePortfolio } from '@/hooks/usePaper'
+import { usePlaceOrder, usePortfolio } from '@/hooks/usePaper'
 import { addConditional } from '@/hooks/useConditionalOrders'
 import { formatNum } from '@/lib/format'
 import { fmtPrice, fmtQty } from '@/lib/symbolFormat'
@@ -37,9 +37,7 @@ export function OrderForm() {
 
   const { ticket } = useOrderTicket()
   const { data: portfolio } = usePortfolio()
-  const { data: orders } = usePaperOrders()
   const place = usePlaceOrder()
-  const fill = useFillOrder()
 
   // Order book'tan fiyata tiklayinca: limit moduna gec + fiyati doldur
   useEffect(() => {
@@ -56,20 +54,8 @@ export function OrderForm() {
     return () => closeWs(ws)
   }, [symbol])
 
-  // Limit otomatik dolum: aktif sembolde fiyat hedefe ulasinca acik limit emirleri dolar.
-  // firedRef: ayni emri (invalidate gecikmesinde) tekrar tetiklemeyi onler.
-  const firedRef = useRef<Set<number>>(new Set())
-  useEffect(() => {
-    if (livePrice == null || !orders) return
-    for (const o of orders) {
-      if (o.status !== 'OPEN' || o.type !== 'LIMIT' || o.symbol !== symbol || o.price == null) continue
-      const crossed = o.side === 'BUY' ? livePrice <= o.price : livePrice >= o.price
-      if (crossed && !firedRef.current.has(o.id)) {
-        firedRef.current.add(o.id)
-        fill.mutate(o.id)
-      }
-    }
-  }, [livePrice, orders, symbol, fill])
+  // NOT: LIMIT emir dolumu artik SUNUCUDA (PaperOrderMatcher @Scheduled) yapilir; istemci
+  // sadece durumu poll'lar. Boylece dolum, sekme acik mi durumundan bagimsizdir.
 
   const usdt = portfolio?.usdtBalance ?? 0
   const position = portfolio?.positions.find((p) => p.asset === asset)

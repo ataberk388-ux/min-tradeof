@@ -84,6 +84,42 @@ public class PaperTradeService {
         return orderRepo.save(order);
     }
 
+    /**
+     * Sunucu-tarafi emir eslestirici (PaperOrderMatcher) icin: anlik piyasa fiyati limit
+     * cizgisini gecmisse emri limit fiyatindan SUNUCUDA doldurur. Boylece dolum, istemci
+     * (sekme acik mi) durumundan bagimsiz, otoritesi sunucuda olur.
+     *
+     * <p>Yetersiz bakiye/pozisyon gibi doldurulamaz durumda emir iptal edilir (sonsuz tekrar
+     * denemeyi onler). Tek transaction icinde calisir; applyFill degisiklik yapmadan once
+     * dogrulama yaptigi icin yakalanan istisnada kismi mutasyon olmaz.
+     */
+    @Transactional
+    public void matchAndFill(Long orderId, BigDecimal marketPrice) {
+        PaperOrder order = orderRepo.findById(orderId).orElse(null);
+        if (order == null
+                || order.getStatus() != OrderStatus.OPEN
+                || order.getType() != OrderType.LIMIT
+                || order.getPrice() == null) {
+            return;
+        }
+        boolean crossed = order.getSide() == OrderSide.BUY
+                ? marketPrice.compareTo(order.getPrice()) <= 0
+                : marketPrice.compareTo(order.getPrice()) >= 0;
+        if (!crossed) {
+            return;
+        }
+        String asset = order.getSymbol().substring(0, order.getSymbol().length() - 4);
+        BigDecimal price = order.getPrice();
+        try {
+            applyFill(order.getUserId(), asset, order.getSide(), order.getQty(), price);
+            order.setStatus(OrderStatus.FILLED);
+            order.setFillPrice(price);
+            order.setFilledAt(Instant.now());
+        } catch (PaperTradeException e) {
+            order.setStatus(OrderStatus.CANCELLED);
+        }
+    }
+
     /** Acik bir LIMIT emrini limit fiyatindan gerceklestirir (fiyat hedefe ulasinca cagrilir). */
     @Transactional
     public PaperOrder fill(Long orderId, Long userId) {
