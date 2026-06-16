@@ -1,6 +1,6 @@
 import { useEffect, useReducer } from 'react'
 
-export type Route = 'trade' | 'markets' | 'portfolio' | 'alarms'
+export type Route = 'trade' | 'markets' | 'portfolio' | 'alarms' | 'profile'
 
 const KEY = 'cryptoalarm.route'
 

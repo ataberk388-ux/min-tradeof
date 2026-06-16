@@ -12,6 +12,7 @@ import { WatchlistBar } from '@/components/trade/WatchlistBar'
 import { MarketsPage } from '@/components/pages/MarketsPage'
 import { PortfolioPage } from '@/components/pages/PortfolioPage'
 import { AlarmsPage } from '@/components/pages/AlarmsPage'
+import { ProfilePage } from '@/components/pages/ProfilePage'
 import { useRoute } from '@/hooks/useRoute'
 
 /** Dikey panel kenari (yatay PanelGroup icinde) — surukle ile genislik ayari. */
@@ -41,6 +42,7 @@ export function DesktopTerminal() {
           {route === 'markets' && <MarketsPage />}
           {route === 'portfolio' && <PortfolioPage />}
           {route === 'alarms' && <AlarmsPage />}
+          {route === 'profile' && <ProfilePage />}
         </div>
       )}
     </div>

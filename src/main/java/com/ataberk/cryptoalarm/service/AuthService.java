@@ -2,6 +2,7 @@ package com.ataberk.cryptoalarm.service;
 
 import com.ataberk.cryptoalarm.domain.User;
 import com.ataberk.cryptoalarm.dto.AuthResponse;
+import com.ataberk.cryptoalarm.dto.ChangePasswordRequest;
 import com.ataberk.cryptoalarm.dto.LoginRequest;
 import com.ataberk.cryptoalarm.dto.RegisterRequest;
 import com.ataberk.cryptoalarm.repository.UserRepository;
@@ -41,5 +42,15 @@ public class AuthService {
             throw new InvalidCredentialsException();
         }
         return new AuthResponse(jwtService.issue(user), user.getUsername());
+    }
+
+    /** Oturum acmis kullanicinin sifresini degistirir: mevcut sifre dogrulanir, yeni hash yazilir. */
+    @Transactional
+    public void changePassword(Long userId, ChangePasswordRequest request) {
+        User user = userRepository.findById(userId).orElseThrow(InvalidCredentialsException::new);
+        if (!passwordEncoder.matches(request.currentPassword(), user.getPasswordHash())) {
+            throw new InvalidCredentialsException();
+        }
+        user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
     }
 }

@@ -75,7 +75,7 @@ export function TerminalTopbar() {
         >
           {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
         </button>
-        <UserMenu onSettings={() => {}} />
+        <UserMenu onSettings={() => navigate('profile')} />
       </div>
     </header>
   )

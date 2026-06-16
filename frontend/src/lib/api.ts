@@ -110,4 +110,12 @@ export async function loginUser(input: LoginInput): Promise<AuthResponse> {
   return data
 }
 
+/** Oturum acmis kullanicinin sifresini degistirir (kimlik dogrulamali /api/account). */
+export async function changePassword(input: {
+  currentPassword: string
+  newPassword: string
+}): Promise<void> {
+  await api.post('/account/password', input)
+}
+
 export default api
