@@ -1,4 +1,5 @@
 import { useMemo, type ReactNode } from 'react'
+import * as Tabs from '@radix-ui/react-tabs'
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts'
 import { toast } from 'sonner'
 import { RotateCcw } from 'lucide-react'
@@ -6,6 +7,7 @@ import { usePortfolioValue } from '@/hooks/usePortfolioValue'
 import { usePaperOrders, useResetPaper } from '@/hooks/usePaper'
 import { useActiveSymbol } from '@/hooks/useActiveSymbol'
 import { useRoute } from '@/hooks/useRoute'
+import { AnalyticsView } from '@/components/pages/AnalyticsView'
 import { formatNum } from '@/lib/format'
 import { fmtPrice, fmtQty } from '@/lib/symbolFormat'
 
@@ -53,6 +55,22 @@ export function PortfolioPage() {
           Hesabı sıfırla
         </button>
       </div>
+
+      <Tabs.Root defaultValue="overview">
+        <Tabs.List className="mb-4 flex gap-5 border-b border-bn-line text-sm">
+          <Tabs.Trigger value="overview" className="-mb-px border-b-2 border-transparent py-2 text-bn-sub transition data-[state=active]:border-bn-gold data-[state=active]:font-medium data-[state=active]:text-bn-txt">
+            Genel Bakış
+          </Tabs.Trigger>
+          <Tabs.Trigger value="analiz" className="-mb-px border-b-2 border-transparent py-2 text-bn-sub transition data-[state=active]:border-bn-gold data-[state=active]:font-medium data-[state=active]:text-bn-txt">
+            Analiz
+          </Tabs.Trigger>
+        </Tabs.List>
+
+        <Tabs.Content value="analiz">
+          <AnalyticsView />
+        </Tabs.Content>
+
+        <Tabs.Content value="overview">
 
       {/* Ozet kartlar */}
       <div className="mb-5 grid gap-3 sm:grid-cols-3">
@@ -218,6 +236,9 @@ export function PortfolioPage() {
           </div>
         )}
       </div>
+
+        </Tabs.Content>
+      </Tabs.Root>
     </div>
   )
 }
