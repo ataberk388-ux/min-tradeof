@@ -93,6 +93,59 @@ flowchart LR
 
 > 📖 **Full data-flow walkthrough** — every flow explained class-by-class (auth, market data, alarm hot path, order matcher, conditional orders, PnL, metrics, Flyway): **[`docs/DATA-FLOW.md`](docs/DATA-FLOW.md)**
 
+## 🗄️ Data Model
+
+PostgreSQL schema (Flyway `V1__init.sql`). Everything is partitioned per user — a single `users` row owns its paper account, positions, open/filled orders and price alarms.
+
+```mermaid
+erDiagram
+    users ||--|| paper_accounts : owns
+    users ||--o{ paper_positions : holds
+    users ||--o{ paper_orders : places
+    users ||--o{ alarms : defines
+
+    users {
+        bigint id PK
+        varchar username UK
+        varchar password_hash
+        timestamptz created_at
+    }
+    paper_accounts {
+        bigint user_id PK_FK
+        numeric usdt_balance
+    }
+    paper_positions {
+        bigint id PK
+        bigint user_id FK
+        varchar asset
+        numeric qty
+        numeric avg_price
+    }
+    paper_orders {
+        bigint id PK
+        bigint user_id FK
+        varchar symbol
+        varchar side
+        varchar type
+        numeric price
+        numeric qty
+        varchar status
+        numeric fill_price
+    }
+    alarms {
+        bigint id PK
+        bigint user_id FK
+        varchar symbol
+        numeric target_price
+        varchar direction
+        varchar type
+        boolean is_active
+        timestamptz triggered_at
+    }
+```
+
+> `paper_positions` is unique on `(user_id, asset)`; hot query paths are indexed on `user_id`, alarm `(user_id, is_active)` and order `(status, type)`.
+
 ## ⚙️ Getting Started
 
 **Prerequisites:** JDK 21 · Node 18+ · Docker (for PostgreSQL)
