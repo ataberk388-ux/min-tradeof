@@ -3,9 +3,9 @@ services:
     image: postgres:16-alpine
     container_name: cryptoalarm-db
     environment:
-      POSTGRES_DB: cryptoalarm
-      POSTGRES_USER: cryptoalarm
-      POSTGRES_PASSWORD: cryptoalarm
+      POSTGRES_DB: ${POSTGRES_DB:-cryptoalarm}
+      POSTGRES_USER: ${POSTGRES_USER:-cryptoalarm}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cryptoalarm}
     ports:
       - "5432:5432"
     volumes:

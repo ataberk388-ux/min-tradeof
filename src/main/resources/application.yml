@@ -2,9 +2,10 @@ spring:
   application:
     name: cryptoalarm
   datasource:
-    url: jdbc:postgresql://localhost:5432/cryptoalarm
-    username: cryptoalarm
-    password: cryptoalarm
+    # Uretimde POSTGRES_* / DATABASE_URL ENV degiskenlerinden gelir; burada dev varsayilani.
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/cryptoalarm}
+    username: ${POSTGRES_USER:cryptoalarm}
+    password: ${POSTGRES_PASSWORD:cryptoalarm}
   jpa:
     hibernate:
       # Sema artik Flyway tarafindan yonetilir; Hibernate yalniz dogrular (drift yakalar).
